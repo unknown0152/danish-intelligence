@@ -17,6 +17,7 @@
       "repository": "https://github.com/unknown0152/danish-intelligence",
       "image": "ghcr.io/unknown0152/danish-intelligence",
       "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png",
+      "screenshots": [],
       "supported_architectures": [
         "amd64"
       ],
