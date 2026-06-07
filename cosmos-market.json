@@ -6,7 +6,7 @@
       "id": "danish-intelligence",
       "name": "Danish Intelligence",
       "description": "Unified Danish Media Stack Core",
-      "longDescription": "Unified NFO-Hunter, OldBoys Proxy, and DanskArr Autopilot in one Apple-clean service. Automatically configures Radarr and Sonarr with Danish Custom Formats and Quality Profiles.",
+      "longDescription": "<p><b>Danish Intelligence Core</b> is a unified service that handles everything Danish for your media stack in one place. It replaces three separate containers (dksubs-proxy, ob-proxy, and danskarr) with a single, high-performance engine.</p><p><b>Post-install</b>: The service automatically discovers your Arrs and paints Custom Formats and Quality Profiles automatically.</p>",
       "url": "https://github.com/unknown0152/danish-intelligence",
       "tags": [
         "radarr",
