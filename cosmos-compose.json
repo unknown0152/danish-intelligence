@@ -32,6 +32,7 @@
                 "PROWLARR_API_KEY={Context.ProwlarrKey}",
                 "OB_API_TOKEN={Context.OldBoysToken}",
                 "OB_RID={Context.OldBoysRSS}",
+                "PROXY_API_KEY={Passwords.32}",
                 "CACHE_DB=/config/proxy_cache.db",
                 "OB_PROXY_DB=/config/ob_meta.db",
                 "LISTEN_PORT=9699",
