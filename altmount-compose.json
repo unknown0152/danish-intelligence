@@ -20,7 +20,7 @@
     },
     "services": {
         "altmount": {
-            "image": "ghcr.io/unknown0152/altmount:latest",
+            "image": "ghcr.io/unknown0152/altmount-patched:latest",
             "container_name": "altmount",
             "restart": "unless-stopped",
             "environment": [

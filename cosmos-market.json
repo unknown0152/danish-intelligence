@@ -36,8 +36,8 @@
         "danish",
         "patched"
       ],
-      "repository": "https://github.com/unknown0152/danish-intelligence",
-      "image": "ghcr.io/unknown0152/altmount",
+      "repository": "https://github.com/unknown0152/altmount-patched",
+      "image": "ghcr.io/unknown0152/altmount-patched",
       "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png",
       "screenshots": [],
       "supported_architectures": [
