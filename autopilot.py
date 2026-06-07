@@ -8,11 +8,11 @@ from collections import defaultdict
 # --- Configuration ---
 RADARR_URL = os.environ.get("RADARR_URL", "http://radarr:7878")
 SONARR_URL = os.environ.get("SONARR_URL", "http://sonarr:8989")
-PROXY_URL = os.environ.get("PROXY_URL", "http://dksubs-proxy:9699")
+PROXY_URL = os.environ.get("PROXY_URL", "http://danish-intelligence:9699")
 
 RADARR_KEY = os.environ.get("RADARR_APIKEY", "")
 SONARR_KEY = os.environ.get("SONARR_APIKEY", "")
-PROWLARR_KEY = os.environ.get("PROWLARR_APIKEY", "")
+PROWLARR_KEY = os.environ.get("PROWLARR_APIKEY", os.environ.get("PROWLARR_API_KEY", ""))
 ALTMOUNT_KEY = os.environ.get("ALTMOUNT_APIKEY", "")
 SEARCH_INDEXER_ID = "16" # OldBoys (Specialized for DK content)
 

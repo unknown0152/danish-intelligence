@@ -2207,11 +2207,19 @@ async def handle_altmount(request: web.Request) -> web.Response:
         return web.json_response({"status": False, "error": str(e)}, status=502)
 
 
+def _redacted_query(query) -> str:
+    secret_names = {"apikey", "api_key", "x-api-key", "token", "key", "password"}
+    return urlencode([
+        (name, "***" if name.lower() in secret_names else value)
+        for name, value in query.items()
+    ])
+
+
 async def handle(request: web.Request) -> web.Response:
     _metrics["requests_total"] += 1
     _req_id.set(secrets.token_hex(4))
     path = request.path.lstrip("/")
-    log(f"REQ-START: /{path} {request.rel_url.query}", "INFO")
+    log(f"REQ-START: /{path} {_redacted_query(request.rel_url.query)}", "INFO")
 
     if path.startswith("altmount"):
         return await handle_altmount(request)

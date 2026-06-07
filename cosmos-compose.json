@@ -33,6 +33,9 @@
                 "OB_API_TOKEN={Context.OldBoysToken}",
                 "OB_RID={Context.OldBoysRSS}",
                 "PROXY_API_KEY={Passwords.32}",
+                "PROXY_URL=http://danish-intelligence:9699",
+                "RADARR_URL=http://radarr:7878",
+                "SONARR_URL=http://sonarr:8989",
                 "CACHE_DB=/config/proxy_cache.db",
                 "OB_PROXY_DB=/config/ob_meta.db",
                 "LISTEN_PORT=9699",
@@ -48,6 +51,18 @@
                     "source": "/srv/config/danish-intelligence",
                     "target": "/config",
                     "type": "bind"
+                },
+                {
+                    "source": "/srv/config/radarr",
+                    "target": "/arr-config/radarr",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
+                    "source": "/srv/config/sonarr",
+                    "target": "/arr-config/sonarr",
+                    "type": "bind",
+                    "read_only": true
                 }
             ],
             "networks": {

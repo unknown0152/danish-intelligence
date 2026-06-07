@@ -6,6 +6,7 @@ import re
 import time
 import logging
 import subprocess
+from pathlib import Path
 
 from aiohttp import web
 import aiohttp
@@ -21,9 +22,31 @@ import ob_proxy.server as ob_server
 
 # 3. Import danskarr logic
 from autopilot import run_autopilot
+from auto_config import paint as paint_auto_config
 
 # Silence noise
 logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
+
+
+def ensure_proxy_api_key():
+    """Cosmos may leave {Passwords.32} empty; persist a fallback key if needed."""
+    if os.environ.get("PROXY_API_KEY"):
+        return
+
+    key_path = Path(os.getenv("PROXY_API_KEY_FILE", "/config/proxy_api_key"))
+    try:
+        if key_path.exists():
+            key = key_path.read_text().strip()
+        else:
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            key = secrets.token_urlsafe(32)
+            key_path.write_text(key)
+            key_path.chmod(0o600)
+        os.environ["PROXY_API_KEY"] = key
+        print("[Core] Generated fallback PROXY_API_KEY for OldBoys proxy", flush=True)
+    except Exception as e:
+        os.environ["PROXY_API_KEY"] = secrets.token_urlsafe(32)
+        print(f"[Core] Generated ephemeral PROXY_API_KEY fallback: {e}", flush=True)
 
 async def autopilot_loop():
     """Background task for DanskArr autopilot."""
@@ -38,39 +61,20 @@ async def autopilot_loop():
         await asyncio.sleep(3600 * 6)
 
 async def auto_config_painter():
-    """Run the setup-proxy.sh logic to paint CFs and Profiles."""
+    """Paint CFs, profiles, and proxy URLs through Servarr HTTP APIs."""
     print("[Core] Auto-Config: Waiting for Arrs to be ready...", flush=True)
     await asyncio.sleep(30) # Give Arrs time to start
     
     try:
         print("[Core] Auto-Config: Painting Custom Formats and Profiles...", flush=True)
-        # We run the setup script which is now optimized and 4K-free
-        # We pass DRY_RUN=0 and ensure it uses the container's environment
-        cmd = ["bash", "setup-proxy.sh"]
-        env = os.environ.copy()
-        env["PROWLARR_URL"] = "http://prowlarr:9696"
-        # Ensure the script knows the internal proxy key
-        if "PROXY_API_KEY" in os.environ:
-            env["PROXY_API_KEY"] = os.environ["PROXY_API_KEY"]
-        
-        process = await asyncio.create_subprocess_exec(
-            *cmd, env=env,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode == 0:
-            print("[Core] Auto-Config: SUCCESS. CFs and Profiles painted.", flush=True)
-        else:
-            print(f"[Core] Auto-Config: FAILED (code {process.returncode})", flush=True)
-            print(f"Error: {stderr.decode()}", flush=True)
-            
+        totals = await asyncio.to_thread(paint_auto_config)
+        print(f"[Core] Auto-Config: SUCCESS. {totals}", flush=True)
     except Exception as e:
         print(f"[Core] Auto-Config: Critical Error: {e}", flush=True)
 
 async def on_startup(app):
     print("[Core] Running startup sequence...", flush=True)
+    ensure_proxy_api_key()
     
     # Init dksubs
     await main_proxy.on_startup(app)
