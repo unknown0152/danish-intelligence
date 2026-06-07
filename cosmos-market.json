@@ -43,7 +43,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-compose.json?v=4"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json"
     }
   ]
 }

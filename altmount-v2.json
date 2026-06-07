@@ -54,9 +54,7 @@
                     "type": "bind"
                 }
             ],
-            "devices": [
-                "/dev/fuse:/dev/fuse:rwm"
-            ],
+            "devices": ["/dev/fuse:/dev/fuse:rwm"],
             "cap_add": [
                 "SYS_ADMIN"
             ],
