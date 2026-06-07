@@ -40,7 +40,7 @@
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "false",
-                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/dksubs-proxy-v2/master/.assets/icon.png"
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png"
             },
             "volumes": [
                 {
