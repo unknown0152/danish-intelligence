@@ -1,15 +1,15 @@
 {
     "minVersion": "0.9.0",
     "services": {
-        "danish-intelligence": {
+        "{ServiceName}": {
             "image": "ghcr.io/unknown0152/danish-intelligence:latest",
-            "container_name": "danish-intelligence",
+            "container_name": "{ServiceName}",
             "restart": "unless-stopped",
             "environment": [
                 "PROWLARR_URL=http://prowlarr:9696",
-                "PROWLARR_API_KEY={{Prowlarr_API_Key}}",
-                "OB_API_TOKEN={{OldBoys_API_Token}}",
-                "OB_RID={{OldBoys_RSS_Key}}",
+                "PROWLARR_API_KEY={{ProwlarrApiKey}}",
+                "OB_API_TOKEN={{OldBoysApiToken}}",
+                "OB_RID={{OldBoysRssKey}}",
                 "CACHE_DB=/config/proxy_cache.db",
                 "OB_PROXY_DB=/config/ob_meta.db",
                 "LISTEN_PORT=9699",
