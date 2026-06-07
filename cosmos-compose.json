@@ -34,6 +34,7 @@
                 "OB_RID={Context.OldBoysRSS}",
                 "PROXY_API_KEY={Passwords.32}",
                 "PROXY_URL=http://danish-intelligence:9699",
+                "ALTMOUNT_URL=http://altmount:8080/sabnzbd",
                 "RADARR_URL=http://radarr:7878",
                 "SONARR_URL=http://sonarr:8989",
                 "CACHE_DB=/config/proxy_cache.db",

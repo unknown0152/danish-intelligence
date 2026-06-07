@@ -3,17 +3,35 @@ import os
 import re
 import time
 import secrets
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from collections import defaultdict
 
 # --- Configuration ---
 RADARR_URL = os.environ.get("RADARR_URL", "http://radarr:7878")
 SONARR_URL = os.environ.get("SONARR_URL", "http://sonarr:8989")
 PROXY_URL = os.environ.get("PROXY_URL", "http://danish-intelligence:9699")
+ALTMOUNT_URL = os.environ.get("ALTMOUNT_URL", "http://altmount:8080/sabnzbd")
 
-RADARR_KEY = os.environ.get("RADARR_APIKEY", "")
+def _clean_env(name):
+    value = os.environ.get(name, "")
+    return "" if value.startswith("{") and value.endswith("}") else value
+
+def _read_arr_key(name):
+    for path in (f"/arr-config/{name}/config.xml", f"/srv/config/{name}/config.xml"):
+        cfg = Path(path)
+        if not cfg.exists():
+            continue
+        try:
+            return ET.parse(cfg).getroot().findtext("ApiKey", default="").strip()
+        except Exception:
+            continue
+    return ""
+
+RADARR_KEY = _clean_env("RADARR_APIKEY") or _clean_env("RADARR_API_KEY") or _read_arr_key("radarr")
 SONARR_KEY = os.environ.get("SONARR_APIKEY", "")
 PROWLARR_KEY = os.environ.get("PROWLARR_APIKEY", os.environ.get("PROWLARR_API_KEY", ""))
-ALTMOUNT_KEY = os.environ.get("ALTMOUNT_APIKEY", "")
+ALTMOUNT_KEY = _clean_env("ALTMOUNT_APIKEY") or _clean_env("ALTMOUNT_API_KEY")
 SEARCH_INDEXER_ID = "16" # OldBoys (Specialized for DK content)
 
 CORE_SERIES = ["Dragon Ball Z", "Dragon Ball", "Batman", "Asterix", "South Park", "SpongeBob"]
@@ -53,16 +71,21 @@ def push_to_radarr(movie, release_title, guid, indexer_id):
     try:
         # 1. Start the download in AltMount directly
         # AltMount expects mode=addfile via POST
-        alt_url = f"http://altmount:8080/sabnzbd?mode=addfile&name={title}&cat=movies&apikey={ALTMOUNT_KEY}"
+        alt_params = {"mode": "addfile", "name": release_title, "cat": "movies"}
+        if ALTMOUNT_KEY:
+            alt_params["apikey"] = ALTMOUNT_KEY
+        elif RADARR_KEY:
+            alt_params["ma_username"] = RADARR_URL
+            alt_params["ma_password"] = RADARR_KEY
 
         # We fetch the NZB from the proxy and send it to AltMount
         nzb_url = f"{PROXY_URL}/16/api?t=get&id={guid}&apikey={PROWLARR_KEY}"
 
-        nzb_resp = requests.get(nzb_url)
+        nzb_resp = requests.get(nzb_url, timeout=60)
         
         if nzb_resp.status_code == 200:
             files = {'nzbfile': (f'{release_title}.nzb', nzb_resp.content)}
-            alt_r = requests.post(alt_url, files=files)
+            alt_r = requests.post(ALTMOUNT_URL, params=alt_params, files=files, timeout=60)
             
             if alt_r.status_code in [200, 201]:
                 print(f"      SUCCESS: Sent directly to AltMount!")

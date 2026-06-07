@@ -46,6 +46,7 @@ VERSION = "6.0"
 
 PROWLARR_URL = os.getenv("PROWLARR_URL", "http://Prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = os.getenv("PROWLARR_API_KEY", "")
+ALTMOUNT_URL = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
 LISTEN_HOST  = os.getenv("LISTEN_HOST",  "0.0.0.0")
 LISTEN_PORT  = int(os.getenv("LISTEN_PORT",  "9699"))
 CACHE_DB              = os.getenv("CACHE_DB",              "proxy_cache.db")
@@ -2191,7 +2192,7 @@ async def handle_altmount(request: web.Request) -> web.Response:
         params["mode"] = "status"
 
     # Forward to AltMount container
-    alt_url = f"http://altmount:8080/sabnzbd?{urlencode(params)}"
+    alt_url = f"{ALTMOUNT_URL}?{urlencode(params)}"
     session = request.app['session']
     try:
         # Forward everything (method, body, headers)

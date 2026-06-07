@@ -49,6 +49,7 @@ The container expects Docker DNS names for the media stack:
 - `http://radarr:7878`
 - `http://sonarr:8989`
 - `http://danish-intelligence:9699`
+- `http://altmount:8080` when AltMount is installed
 
 In Cosmos this is handled by attaching the service to the shared `media-stack`
 network.
@@ -118,10 +119,18 @@ If OldBoys fails with `PROXY_API_KEY` missing, update to the latest image. The
 service now persists a fallback key in `/config/proxy_api_key` when Cosmos does
 not materialize `{Passwords.32}`.
 
+For AltMount integration:
+
+- AltMount should be reachable as `http://altmount:8080`.
+- Its SAB-compatible API should be enabled at `/sabnzbd`.
+- Danish Intelligence defaults `ALTMOUNT_URL` to
+  `http://altmount:8080/sabnzbd`.
+- If `ALTMOUNT_APIKEY` is not supplied, DanskArr autopilot will try AltMount's
+  ARR-credential auth path using the local Radarr API key.
+
 ## Security Notes
 
 - The container does not need `/var/run/docker.sock`.
 - Arr config mounts are read-only and used only to discover local API keys.
 - Request logs redact `apikey`, token, password, and similar query values.
 - Do not commit real `.env` files or API keys.
-
