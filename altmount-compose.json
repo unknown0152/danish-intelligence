@@ -55,11 +55,7 @@
                 }
             ],
             "devices": [
-                {
-                    "path_on_host": "/dev/fuse",
-                    "path_in_container": "/dev/fuse",
-                    "cgroup_permissions": "rwm"
-                }
+                "/dev/fuse:/dev/fuse:rwm"
             ],
             "cap_add": [
                 "SYS_ADMIN"
