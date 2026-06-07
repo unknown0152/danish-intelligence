@@ -6,13 +6,13 @@
       "id": "danish-intelligence",
       "name": "Danish Intelligence",
       "description": "Unified Danish Media Stack Core",
-      "longDescription": "Unified NFO-Hunter, OldBoys Proxy, and DanskArr Autopilot in one Apple-clean service.",
+      "longDescription": "Unified NFO-Hunter, OldBoys Proxy, and DanskArr Autopilot in one Apple-clean service. Automatically configures Radarr and Sonarr with Danish Custom Formats and Quality Profiles.",
       "url": "https://github.com/unknown0152/danish-intelligence",
       "tags": [
-        "danish",
         "radarr",
         "sonarr",
         "prowlarr",
+        "danish",
         "intelligence"
       ],
       "repository": "https://github.com/unknown0152/danish-intelligence",
