@@ -22,7 +22,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json?v=2"
     }
   ]
 }
