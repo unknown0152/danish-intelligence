@@ -52,16 +52,7 @@
             ],
             "networks": {
                 "media-stack": {}
-            },
-            "routes": [
-                {
-                    "name": "System Health",
-                    "description": "Danish Intelligence Core Health Check",
-                    "use_host": true,
-                    "target": "http://danish-intelligence:9699",
-                    "mode": "SERVAPP"
-                }
-            ]
+            }
         }
     }
 }

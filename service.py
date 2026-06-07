@@ -49,6 +49,9 @@ async def auto_config_painter():
         cmd = ["bash", "setup-proxy.sh"]
         env = os.environ.copy()
         env["PROWLARR_URL"] = "http://prowlarr:9696"
+        # Ensure the script knows the internal proxy key
+        if "PROXY_API_KEY" in os.environ:
+            env["PROXY_API_KEY"] = os.environ["PROXY_API_KEY"]
         
         process = await asyncio.create_subprocess_exec(
             *cmd, env=env,
