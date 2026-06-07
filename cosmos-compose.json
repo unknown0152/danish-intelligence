@@ -1,37 +1,37 @@
 {
+    "minVersion": "0.9.0",
     "cosmos-installer": {
         "form": [
             {
-                "name": "Prowlarr_API_Key",
+                "name": "ProwlarrKey",
                 "label": "Prowlarr API Key",
                 "type": "text",
                 "required": true
             },
             {
-                "name": "OldBoys_API_Token",
+                "name": "OldBoysToken",
                 "label": "OldBoys API Token",
                 "type": "text",
                 "required": true
             },
             {
-                "name": "OldBoys_RSS_Key",
+                "name": "OldBoysRSS",
                 "label": "OldBoys RSS Key (RID)",
                 "type": "text",
                 "required": true
             }
         ]
     },
-    "minVersion": "0.9.0",
     "services": {
-        "{ServiceName}": {
+        "danish-intelligence": {
             "image": "ghcr.io/unknown0152/danish-intelligence:latest",
-            "container_name": "{ServiceName}",
+            "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
                 "PROWLARR_URL=http://prowlarr:9696",
-                "PROWLARR_API_KEY={Context.Prowlarr_API_Key}",
-                "OB_API_TOKEN={Context.OldBoys_API_Token}",
-                "OB_RID={Context.OldBoys_RSS_Key}",
+                "PROWLARR_API_KEY={Context.ProwlarrKey}",
+                "OB_API_TOKEN={Context.OldBoysToken}",
+                "OB_RID={Context.OldBoysRSS}",
                 "CACHE_DB=/config/proxy_cache.db",
                 "OB_PROXY_DB=/config/ob_meta.db",
                 "LISTEN_PORT=9699",
@@ -51,7 +51,16 @@
             ],
             "networks": {
                 "media-stack": {}
-            }
+            },
+            "routes": [
+                {
+                    "name": "System Health",
+                    "description": "Danish Intelligence Core Health Check",
+                    "use_host": true,
+                    "target": "http://danish-intelligence:9699",
+                    "mode": "SERVAPP"
+                }
+            ]
         }
     }
 }
