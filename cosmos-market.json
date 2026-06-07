@@ -1,5 +1,5 @@
 {
-  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=3",
+  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json",
   "showcase": [],
   "all": [
     {
@@ -22,7 +22,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json?v=3"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json"
     },
     {
       "id": "altmount-danish",
