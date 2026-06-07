@@ -1,0 +1,57 @@
+{
+    "cosmos-installer": {
+        "form": [
+            {
+                "name": "PROWLARR_API_KEY",
+                "label": "Prowlarr API Key",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "OB_API_TOKEN",
+                "label": "OldBoys API Token",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "OB_RID",
+                "label": "OldBoys RSS Key (RID)",
+                "type": "text",
+                "required": true
+            }
+        ]
+    },
+    "minVersion": "0.9.0",
+    "services": {
+        "danish-intelligence": {
+            "image": "ghcr.io/unknown0152/danish-intelligence:latest",
+            "container_name": "danish-intelligence",
+            "restart": "unless-stopped",
+            "environment": [
+                "PROWLARR_URL=http://prowlarr:9696",
+                "PROWLARR_API_KEY={PROWLARR_API_KEY}",
+                "OB_API_TOKEN={OB_API_TOKEN}",
+                "OB_RID={OB_RID}",
+                "CACHE_DB=/config/proxy_cache.db",
+                "OB_PROXY_DB=/config/ob_meta.db",
+                "LISTEN_PORT=9699",
+                "LISTEN_HOST=0.0.0.0"
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "false",
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/dksubs-proxy-v2/master/.assets/icon.png"
+            },
+            "volumes": [
+                {
+                    "source": "/srv/config/danish-intelligence",
+                    "target": "/config",
+                    "type": "bind"
+                }
+            ],
+            "networks": {
+                "media-stack": {}
+            }
+        }
+    }
+}

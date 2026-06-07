@@ -1,0 +1,18 @@
+{
+  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json",
+  "all": [
+    {
+      "id": "danish-intelligence",
+      "name": "Danish Intelligence",
+      "description": "Unified NFO-Hunter, OldBoys Proxy, and DanskArr Autopilot.",
+      "longDescription": "<h3>Apple-Clean Media Intelligence</h3><p>The <b>Danish Intelligence Core</b> is a unified service that handles everything Danish for your media stack in one place. It replaces three separate containers (dksubs-proxy, ob-proxy, and danskarr) with a single, high-performance engine.</p><ul><li><b>Auto-Config</b>: Automatically 'paints' Custom Formats and Quality Profiles onto your Radarr and Sonarr instances.</li><li><b>NFO Hunter</b>: Real-time vetting of releases for Danish audio and subtitles.</li><li><b>OldBoys Proxy</b>: Integrated translator for the OldBoys Newznab indexer.</li><li><b>DanskArr Autopilot</b>: Background proactive hunting for missing Danish content.</li></ul><p>Simply install, and the service will automatically discover your Arrs and wire everything up.</p>",
+      "url": "https://github.com/unknown0152/danish-intelligence",
+      "tags": ["danish", "radarr", "sonarr", "prowlarr", "intelligence", "apple-clean"],
+      "repository": "https://github.com/unknown0152/danish-intelligence",
+      "image": "ghcr.io/unknown0152/danish-intelligence:latest",
+      "icon": "https://raw.githubusercontent.com/unknown0152/dksubs-proxy-v2/master/.assets/icon.png",
+      "supported_architectures": ["amd64"],
+      "compose": "https://cdn.jsdelivr.net/gh/unknown0152/danish-intelligence@master/cosmos-compose.json"
+    }
+  ]
+}

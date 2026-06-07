@@ -1,0 +1,17 @@
+services:
+  danish-intelligence:
+    build: .
+    image: danish-intelligence:latest
+    container_name: danish-intelligence
+    restart: unless-stopped
+    env_file: [master.env]
+    volumes:
+      - /srv/config/danish-intelligence:/config
+    ports:
+      - "9699:9699"
+    networks:
+      - media-stack
+
+networks:
+  media-stack:
+    external: true
