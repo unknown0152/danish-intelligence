@@ -19,9 +19,9 @@
         ]
     },
     "services": {
-        "altmount": {
+        "{ServiceName}": {
             "image": "ghcr.io/unknown0152/altmount-patched:latest",
-            "container_name": "altmount",
+            "container_name": "{ServiceName}",
             "restart": "unless-stopped",
             "environment": [
                 "PUID=1001",
@@ -29,8 +29,7 @@
                 "TZ=Europe/Copenhagen",
                 "PORT=8080",
                 "LOG_LEVEL=warn",
-                "JWT_SECRET={Context.JWTSecret}",
-                "COOKIE_DOMAIN={Hostnames.0}"
+                "JWT_SECRET={Context.JWTSecret}"
             ],
             "volumes": [
                 {
@@ -54,7 +53,9 @@
                     "type": "bind"
                 }
             ],
-            "devices": ["/dev/fuse:/dev/fuse:rwm"],
+            "devices": [
+                "/dev/fuse:/dev/fuse:rwm"
+            ],
             "cap_add": [
                 "SYS_ADMIN"
             ],
