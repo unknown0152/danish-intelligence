@@ -22,7 +22,28 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json?v=2"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json?v=3"
+    },
+    {
+      "id": "altmount-danish",
+      "name": "AltMount (Danish Edition)",
+      "description": "Patched streaming engine for Danish content",
+      "longDescription": "<p><b>AltMount (Danish Edition)</b> is a custom-patched streaming engine optimized for the Danish media stack. It includes fixes for compressed 'rar2.9' rejections and usenet deadlocks.</p><p><b>Requirements</b>: Requires <code>/dev/fuse</code> access and <code>SYS_ADMIN</code> privileges to perform the virtual mount.</p>",
+      "url": "https://github.com/unknown0152/danish-intelligence",
+      "tags": [
+        "usenet",
+        "streaming",
+        "danish",
+        "patched"
+      ],
+      "repository": "https://github.com/unknown0152/danish-intelligence",
+      "image": "ghcr.io/unknown0152/altmount",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png",
+      "screenshots": [],
+      "supported_architectures": [
+        "amd64"
+      ],
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-compose.json"
     }
   ]
 }

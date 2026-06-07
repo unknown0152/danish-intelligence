@@ -1,0 +1,75 @@
+{
+    "minVersion": "0.9.0",
+    "cosmos-installer": {
+        "form": [
+            {
+                "name": "MediaRoot",
+                "label": "Host Media Root Path",
+                "initialValue": "/srv/media",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "JWTSecret",
+                "label": "JWT Secret (Random string)",
+                "initialValue": "{Passwords.32}",
+                "type": "text",
+                "required": true
+            }
+        ]
+    },
+    "services": {
+        "altmount": {
+            "image": "ghcr.io/unknown0152/altmount:latest",
+            "container_name": "altmount",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID=1001",
+                "PGID=1001",
+                "TZ=Europe/Copenhagen",
+                "PORT=8080",
+                "LOG_LEVEL=warn",
+                "JWT_SECRET={Context.JWTSecret}",
+                "COOKIE_DOMAIN={Hostnames.0}"
+            ],
+            "volumes": [
+                {
+                    "source": "/srv/config/altmount",
+                    "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "/srv/data/altmount",
+                    "target": "/data",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                },
+                {
+                    "source": "/mnt",
+                    "target": "/mnt",
+                    "type": "bind"
+                }
+            ],
+            "devices": [
+                {
+                    "path_on_host": "/dev/fuse",
+                    "path_in_container": "/dev/fuse",
+                    "cgroup_permissions": "rwm"
+                }
+            ],
+            "cap_add": [
+                "SYS_ADMIN"
+            ],
+            "security_opt": [
+                "apparmor:unconfined"
+            ],
+            "networks": {
+                "media-stack": {}
+            }
+        }
+    }
+}
