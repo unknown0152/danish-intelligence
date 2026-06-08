@@ -51,8 +51,8 @@ def _clean_env_value(name: str) -> str:
     return "" if value.startswith("{") and value.endswith("}") else value
 
 
-def _read_prowlarr_api_key() -> str:
-    for path in ("/arr-config/prowlarr/config.xml", "/srv/config/prowlarr/config.xml"):
+def _read_arr_api_key(app_name: str) -> str:
+    for path in (f"/arr-config/{app_name}/config.xml", f"/srv/config/{app_name}/config.xml"):
         cfg = Path(path)
         if not cfg.exists():
             continue
@@ -67,9 +67,14 @@ PROWLARR_URL = os.getenv("PROWLARR_URL", "http://Prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = (
     _clean_env_value("PROWLARR_API_KEY")
     or _clean_env_value("PROWLARR_APIKEY")
-    or _read_prowlarr_api_key()
+    or _read_arr_api_key("prowlarr")
 )
 ALTMOUNT_URL = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
+ALTMOUNT_API_KEY = _clean_env_value("ALTMOUNT_APIKEY") or _clean_env_value("ALTMOUNT_API_KEY")
+RADARR_URL = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
+RADARR_API_KEY = _clean_env_value("RADARR_APIKEY") or _clean_env_value("RADARR_API_KEY") or _read_arr_api_key("radarr")
+SONARR_URL = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
+SONARR_API_KEY = _clean_env_value("SONARR_APIKEY") or _clean_env_value("SONARR_API_KEY") or _read_arr_api_key("sonarr")
 LISTEN_HOST  = os.getenv("LISTEN_HOST",  "0.0.0.0")
 LISTEN_PORT  = int(os.getenv("LISTEN_PORT",  "9699"))
 CACHE_DB              = os.getenv("CACHE_DB",              "proxy_cache.db")
@@ -2242,6 +2247,15 @@ async def handle_altmount(request: web.Request) -> web.Response:
     params = dict(request.rel_url.query)
     if params.get("mode") == "qstatus":
         params["mode"] = "status"
+    if ALTMOUNT_API_KEY:
+        params["apikey"] = ALTMOUNT_API_KEY
+    elif "ma_username" not in params and "ma_password" not in params:
+        if RADARR_API_KEY:
+            params["ma_username"] = RADARR_URL
+            params["ma_password"] = RADARR_API_KEY
+        elif SONARR_API_KEY:
+            params["ma_username"] = SONARR_URL
+            params["ma_password"] = SONARR_API_KEY
 
     # Forward to AltMount container
     alt_url = f"{ALTMOUNT_URL}?{urlencode(params)}"

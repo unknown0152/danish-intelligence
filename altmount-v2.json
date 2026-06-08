@@ -29,7 +29,12 @@
                 "TZ=Europe/Copenhagen",
                 "PORT=8080",
                 "LOG_LEVEL=warn",
-                "JWT_SECRET={Context.JWTSecret}"
+                "JWT_SECRET={Context.JWTSecret}",
+                "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
+                "ALTMOUNT_SABNZBD_COMPLETE_DIR=/mnt/altmount/complete",
+                "ALTMOUNT_ENABLE_SABNZBD=true",
+                "ALTMOUNT_ENABLE_ARRS=true",
+                "ALTMOUNT_API_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://altmount:8080"
             ],
             "volumes": [
                 {
