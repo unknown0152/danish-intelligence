@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import requests
 
@@ -35,6 +36,26 @@ MANAGED_CF_NAMES = {
 MANAGED_PROFILE_NAMES = {"NORDIC", "DanishAudio", "EnglishSubs"}
 DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
 PROXY_URL = os.getenv("PROXY_URL", "http://danish-intelligence:9699").rstrip("/")
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
+
+
+def _arr_visible_proxy_url(url: str) -> str:
+    parsed = urlparse(url)
+    scheme = parsed.scheme or "http"
+    host = parsed.hostname or "danish-intelligence"
+    if host in LOOPBACK_HOSTS:
+        host = "danish-intelligence"
+    port = parsed.port
+    netloc = f"{host}:{port}" if port else host
+    return urlunparse((scheme, netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
+
+
+ARR_PROXY_URL = os.getenv("ARR_PROXY_URL", "").rstrip("/") or _arr_visible_proxy_url(PROXY_URL)
+_PROXY_PARSED = urlparse(ARR_PROXY_URL)
+PROXY_HOST = _PROXY_PARSED.hostname or "danish-intelligence"
+PROXY_PORT = _PROXY_PARSED.port or (443 if _PROXY_PARSED.scheme == "https" else 80)
+PROXY_USE_SSL = _PROXY_PARSED.scheme == "https"
+LEGACY_PROXY_HOSTS = {"dksubs-proxy", "danish-intelligence", PROXY_HOST}
 ARR_CONFIG_PATHS = {
     "Radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
     "Sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
@@ -101,6 +122,24 @@ def _display_name(name: str) -> str:
     name = re.sub(r"(\s*\{DK\})+$", "", name)
     name = re.sub(r"\s*\(Prowlarr\)$", "", name)
     return name.strip()
+
+
+def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
+    implementation = str(client.get("implementation", "")).lower()
+    if implementation != "sabnzbd":
+        return False
+
+    name = str(client.get("name", "")).lower()
+    host = str(_field(client, "host", "")).lower()
+    url_base = str(_field(client, "urlBase", "")).strip("/").lower()
+    port = _field(client, "port", 0)
+
+    return (
+        "altmount" in name
+        or host in LEGACY_PROXY_HOSTS
+        or url_base == "altmount"
+        or str(port) == str(PROXY_PORT)
+    )
 
 
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
@@ -316,16 +355,41 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
     api = f"{app.url}/api/v3"
     by_name = {_clean_name(ix.get("name", "")): str(ix.get("id")) for ix in prowlarr_indexers}
     arr_indexers = _get_json(session, f"{api}/indexer", app.api_key)
+    dk_names = {
+        _clean_name(indexer.get("name", ""))
+        for indexer in arr_indexers
+        if "{dk}" in str(indexer.get("name", "")).lower()
+    }
     linked = 0
     for indexer in arr_indexers:
         base_name = _clean_name(indexer.get("name", ""))
+        if base_name in dk_names and "{dk}" not in str(indexer.get("name", "")).lower():
+            continue
+
         prowlarr_id = by_name.get(base_name)
         if not prowlarr_id:
             continue
-        _set_field(indexer, "baseUrl", f"{PROXY_URL}/{prowlarr_id}")
+        _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/{prowlarr_id}/api")
         _set_field(indexer, "apiKey", prowlarr_key)
         indexer["name"] = f"{_display_name(indexer.get('name', ''))} {{DK}}"
         _put_json(session, f"{api}/indexer/{indexer['id']}?forceSave=true", app.api_key, indexer)
+        linked += 1
+    return linked
+
+
+def _rewire_download_clients(session: requests.Session, app: ArrApp) -> int:
+    api = f"{app.url}/api/v3"
+    clients = _get_json(session, f"{api}/downloadclient", app.api_key)
+    linked = 0
+    for client in clients:
+        if not _is_altmount_proxy_client(client):
+            continue
+
+        _set_field(client, "host", PROXY_HOST)
+        _set_field(client, "port", PROXY_PORT)
+        _set_field(client, "useSsl", PROXY_USE_SSL)
+        _set_field(client, "urlBase", "/altmount")
+        _put_json(session, f"{api}/downloadclient/{client['id']}?forceSave=true", app.api_key, client)
         linked += 1
     return linked
 
@@ -360,17 +424,20 @@ def paint() -> dict[str, int]:
     if not apps:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0}
     for app in apps:
         cf_count, profile_count = _paint_formats_and_profiles(session, app)
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
+        download_clients = _rewire_download_clients(session, app)
         totals["apps"] += 1
         totals["custom_formats"] += cf_count
         totals["profiles"] += profile_count
         totals["linked_indexers"] += linked
+        totals["download_clients"] += download_clients
         print(
             f"[Core] Auto-Config: {app.name} painted {cf_count} CFs, "
-            f"{profile_count} profiles, linked {linked} indexers",
+            f"{profile_count} profiles, linked {linked} indexers, "
+            f"{download_clients} download clients",
             flush=True,
         )
 

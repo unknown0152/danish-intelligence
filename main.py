@@ -325,6 +325,32 @@ _EMPTY_RSS = (
     '</rss>'
 )
 
+_CAPS_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<caps>'
+    '<server appversion="6.0" version="1.0" title="Danish Intelligence"/>'
+    '<limits max="100" default="100"/>'
+    '<registration available="no" open="no"/>'
+    '<searching>'
+    '<search available="yes" supportedParams="q"/>'
+    '<movie-search available="yes" supportedParams="q,imdbid,tmdbid"/>'
+    '<tv-search available="yes" supportedParams="q,tvdbid,rid,season,ep"/>'
+    '</searching>'
+    '<categories>'
+    '<category id="2000" name="Movies">'
+    '<subcat id="2010" name="Movies/Foreign"/>'
+    '<subcat id="2040" name="Movies/HD"/>'
+    '<subcat id="2045" name="Movies/UHD"/>'
+    '<subcat id="2050" name="Movies/Other"/>'
+    '</category>'
+    '<category id="5000" name="TV">'
+    '<subcat id="5030" name="TV/SD"/>'
+    '<subcat id="5040" name="TV/HD"/>'
+    '</category>'
+    '</categories>'
+    '</caps>'
+)
+
 GUID_RE  = re.compile(r"<guid[^>]*>([^<]+)</guid>")
 ATTR_RE  = re.compile(r'<newznab:attr\s+name="(\w+)"\s+value="([^"]*)"', re.I)
 SIZE_RE  = re.compile(r"<size>(\d+)</size>", re.I)
@@ -835,6 +861,9 @@ def _empty_or_filler_response(params: dict):
     the bare empty RSS — propagates the upstream error condition honestly
     instead of fabricating a result Servarr might try to grab."""
     from aiohttp import web as _web
+    if params.get("t") == "caps":
+        return _web.Response(text=_CAPS_XML, content_type='application/xml')
+
     body = _EMPTY_RSS
     if _is_status_probe(params):
         body = _inject_probe_filler_if_empty(body)
