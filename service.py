@@ -1,4 +1,5 @@
 import asyncio
+import html
 import os
 import sys
 import secrets
@@ -6,6 +7,7 @@ import re
 import time
 import logging
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from aiohttp import web
@@ -28,9 +30,46 @@ from auto_config import paint as paint_auto_config
 logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 
 
+CONFIG_KEY_PATHS = {
+    "prowlarr": ("/arr-config/prowlarr/config.xml", "/srv/config/prowlarr/config.xml"),
+    "radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
+    "sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
+}
+
+
+def _clean_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    return "" if value.startswith("{") and value.endswith("}") else value
+
+
+def _read_config_key(app_name: str) -> str:
+    for path in CONFIG_KEY_PATHS.get(app_name, ()):
+        cfg = Path(path)
+        if not cfg.exists():
+            continue
+        try:
+            key = ET.parse(cfg).getroot().findtext("ApiKey", default="").strip()
+            if key:
+                return key
+        except Exception as exc:
+            print(f"[Core] Could not read {path}: {exc}", flush=True)
+    return ""
+
+
+def ensure_prowlarr_api_key() -> bool:
+    key = _clean_env("PROWLARR_API_KEY") or _clean_env("PROWLARR_APIKEY") or _read_config_key("prowlarr")
+    if not key:
+        return False
+
+    os.environ["PROWLARR_API_KEY"] = key
+    main_proxy.PROWLARR_API_KEY = key
+    return True
+
+
 def ensure_proxy_api_key():
     """Cosmos may leave {Passwords.32} empty; persist a fallback key if needed."""
-    if os.environ.get("PROXY_API_KEY"):
+    if _clean_env("PROXY_API_KEY"):
+        os.environ["PROXY_API_KEY"] = _clean_env("PROXY_API_KEY")
         return
 
     key_path = Path(os.getenv("PROXY_API_KEY_FILE", "/config/proxy_api_key"))
@@ -66,15 +105,26 @@ async def auto_config_painter():
     await asyncio.sleep(30) # Give Arrs time to start
     
     try:
+        _APP_STATE["auto_config"] = {"status": "running", "result": None, "error": None}
         print("[Core] Auto-Config: Painting Custom Formats and Profiles...", flush=True)
         totals = await asyncio.to_thread(paint_auto_config)
+        _APP_STATE["auto_config"] = {"status": "success", "result": totals, "error": None}
         print(f"[Core] Auto-Config: SUCCESS. {totals}", flush=True)
     except Exception as e:
+        _APP_STATE["auto_config"] = {"status": "failed", "result": None, "error": str(e)}
         print(f"[Core] Auto-Config: Critical Error: {e}", flush=True)
+
+
+_APP_STATE = {
+    "auto_config": {"status": "not_started", "result": None, "error": None},
+    "prowlarr_key_discovered": False,
+    "oldboys": {"enabled": False, "configured": False, "error": None},
+}
 
 async def on_startup(app):
     print("[Core] Running startup sequence...", flush=True)
     ensure_proxy_api_key()
+    _APP_STATE["prowlarr_key_discovered"] = ensure_prowlarr_api_key()
     
     # Init dksubs
     await main_proxy.on_startup(app)
@@ -84,19 +134,28 @@ async def on_startup(app):
     try:
         ob_cfg = OBConfig.from_env()
         app['config'] = ob_cfg
-        app['client'] = OBClient(
-            base_url=ob_cfg.ob_base_url,
-            api_token=ob_cfg.ob_api_token,
-            rid=ob_cfg.ob_rid,
-            search_path=ob_cfg.ob_search_path,
-            user_agent=ob_cfg.user_agent,
-            max_pages=ob_cfg.max_pages,
-        )
-        await app['client'].start()
-        app['cache'] = SizeCache(ob_cfg.db_path)
-        app['warmer'] = type('Dummy', (), {'enqueue': lambda self, x: None})()
-        print("[Core] OldBoys components initialized", flush=True)
+        if ob_cfg.ob_api_token and ob_cfg.ob_rid:
+            app['client'] = OBClient(
+                base_url=ob_cfg.ob_base_url,
+                api_token=ob_cfg.ob_api_token,
+                rid=ob_cfg.ob_rid,
+                search_path=ob_cfg.ob_search_path,
+                user_agent=ob_cfg.user_agent,
+                max_pages=ob_cfg.max_pages,
+            )
+            await app['client'].start()
+            app['cache'] = SizeCache(ob_cfg.db_path)
+            app['warmer'] = type('Dummy', (), {'enqueue': lambda self, x: None})()
+            app['oldboys_enabled'] = True
+            _APP_STATE["oldboys"] = {"enabled": True, "configured": True, "error": None}
+            print("[Core] OldBoys components initialized", flush=True)
+        else:
+            app['oldboys_enabled'] = False
+            _APP_STATE["oldboys"] = {"enabled": False, "configured": False, "error": None}
+            print("[Core] OldBoys credentials not set; OldBoys features disabled.", flush=True)
     except Exception as e:
+        app['oldboys_enabled'] = False
+        _APP_STATE["oldboys"] = {"enabled": False, "configured": False, "error": str(e)}
         print(f"[Core] Error initializing OldBoys: {e}", flush=True)
 
     # Start background tasks
@@ -119,6 +178,99 @@ async def on_cleanup(app):
     await main_proxy.on_cleanup(app)
     print("[Core] Cleanup sequence complete.", flush=True)
 
+
+async def _http_ok(app: web.Application, url: str, api_key: str = "") -> bool:
+    try:
+        headers = {"X-Api-Key": api_key} if api_key else {}
+        async with app['session'].get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+            return 200 <= resp.status < 400
+    except Exception:
+        return False
+
+
+async def _status_payload(app: web.Application) -> dict:
+    prowlarr_key = _clean_env("PROWLARR_API_KEY") or _clean_env("PROWLARR_APIKEY") or _read_config_key("prowlarr")
+    radarr_key = _clean_env("RADARR_API_KEY") or _clean_env("RADARR_APIKEY") or _read_config_key("radarr")
+    sonarr_key = _clean_env("SONARR_API_KEY") or _clean_env("SONARR_APIKEY") or _read_config_key("sonarr")
+    prowlarr_url = os.getenv("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
+    radarr_url = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
+    sonarr_url = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
+    altmount_url = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
+    altmount_base_url = altmount_url.split("/sabnzbd", 1)[0].rstrip("/")
+
+    checks = {
+        "prowlarr_key": bool(prowlarr_key),
+        "prowlarr_reachable": await _http_ok(app, f"{prowlarr_url}/api/v1/system/status", prowlarr_key),
+        "radarr_key": bool(radarr_key),
+        "radarr_reachable": await _http_ok(app, f"{radarr_url}/api/v3/system/status", radarr_key),
+        "sonarr_key": bool(sonarr_key),
+        "sonarr_reachable": await _http_ok(app, f"{sonarr_url}/api/v3/system/status", sonarr_key),
+        "altmount_reachable": await _http_ok(app, f"{altmount_base_url}/"),
+        "oldboys_optional": True,
+        "auto_config_success": _APP_STATE["auto_config"]["status"] == "success",
+    }
+    ready = all(
+        checks[name]
+        for name in (
+            "prowlarr_key",
+            "prowlarr_reachable",
+            "radarr_key",
+            "radarr_reachable",
+            "sonarr_key",
+            "sonarr_reachable",
+            "altmount_reachable",
+            "auto_config_success",
+        )
+    )
+    return {
+        "status": "ready" if ready else "attention",
+        "checks": checks,
+        "auto_config": _APP_STATE["auto_config"],
+        "oldboys": _APP_STATE["oldboys"],
+        "service": {
+            "version": getattr(main_proxy, "VERSION", "unknown"),
+            "proxy_url": os.getenv("PROXY_URL", "http://danish-intelligence:9699"),
+        },
+    }
+
+
+def _status_html(payload: dict) -> str:
+    rows = []
+    for name, ok in payload["checks"].items():
+        label = name.replace("_", " ").title()
+        rows.append(
+            f"<tr><td>{html.escape(label)}</td><td class=\"{'ok' if ok else 'bad'}\">"
+            f"{'OK' if ok else 'Needs attention'}</td></tr>"
+        )
+    auto = payload["auto_config"]
+    error = html.escape(auto.get("error") or "")
+    error_html = f'<p class="bad">{error}</p>' if error else ""
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>Danish Intelligence Status</title>"
+        "<style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:2rem;max-width:860px}"
+        "table{border-collapse:collapse;width:100%;margin-top:1rem}td{border-bottom:1px solid #ddd;padding:.65rem}"
+        ".ok{color:#126b38;font-weight:700}.bad{color:#9f1d1d;font-weight:700}"
+        "code{background:#f2f2f2;padding:.15rem .3rem;border-radius:4px}</style></head><body>"
+        f"<h1>Danish Intelligence: {html.escape(payload['status'].upper())}</h1>"
+        "<p>This page shows whether the Danish media stack is configured and reachable.</p>"
+        f"<table>{''.join(rows)}</table>"
+        f"<p>Auto-config: <code>{html.escape(auto.get('status', 'unknown'))}</code></p>"
+        f"{error_html}"
+        "<p>JSON: <a href=\"/status.json\">/status.json</a></p>"
+        "</body></html>"
+    )
+
+
+async def handle_status_json(request: web.Request) -> web.Response:
+    return web.json_response(await _status_payload(request.app))
+
+
+async def handle_status(request: web.Request) -> web.Response:
+    payload = await _status_payload(request.app)
+    return web.Response(text=_status_html(payload), content_type="text/html")
+
 async def main():
     app = web.Application(client_max_size=10*1024*1024)
     app.on_startup.append(on_startup)
@@ -126,6 +278,8 @@ async def main():
 
     # Routes
     app.router.add_get("/health", lambda r: web.json_response({"status": "ok", "service": "danish-intelligence"}))
+    app.router.add_get("/status", handle_status)
+    app.router.add_get("/status.json", handle_status_json)
     app.router.add_get("/ob/api", ob_server.handle_api)
     app.router.add_get("/ob/health", ob_server.handle_health)
 

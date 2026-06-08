@@ -10,6 +10,8 @@ from .categories import CategoryMap
 
 def _env(name: str, default: str | None = None, required: bool = False) -> str:
     val = os.environ.get(name, default)
+    if isinstance(val, str) and val.startswith("{") and val.endswith("}"):
+        val = default
     if required and not val:
         raise RuntimeError(f"required environment variable {name} is not set")
     return val or ""
@@ -35,8 +37,8 @@ class Config:
     def from_env(cls) -> "Config":
         return cls(
             ob_base_url=_env("OB_BASE_URL", "https://oldboys.pw").rstrip("/"),
-            ob_api_token=_env("OB_API_TOKEN", required=True),
-            ob_rid=_env("OB_RID", required=True),
+            ob_api_token=_env("OB_API_TOKEN", ""),
+            ob_rid=_env("OB_RID", ""),
             ob_search_path=_env("OB_SEARCH_PATH", "/api/nzbs/filter"),
             proxy_api_key=_env("PROXY_API_KEY", required=True),
             cat_map=CategoryMap(

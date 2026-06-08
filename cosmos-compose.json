@@ -4,21 +4,21 @@
         "form": [
             {
                 "name": "ProwlarrKey",
-                "label": "Prowlarr API Key",
+                "label": "Prowlarr API Key (optional)",
                 "type": "text",
-                "required": true
+                "required": false
             },
             {
                 "name": "OldBoysToken",
-                "label": "OldBoys API Token",
+                "label": "OldBoys API Token (optional)",
                 "type": "text",
-                "required": true
+                "required": false
             },
             {
                 "name": "OldBoysRSS",
-                "label": "OldBoys RSS Key (RID)",
+                "label": "OldBoys RSS Key / RID (optional)",
                 "type": "text",
-                "required": true
+                "required": false
             }
         ]
     },
@@ -54,6 +54,12 @@
                     "type": "bind"
                 },
                 {
+                    "source": "/srv/config/prowlarr",
+                    "target": "/arr-config/prowlarr",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
                     "source": "/srv/config/radarr",
                     "target": "/arr-config/radarr",
                     "type": "bind",
@@ -67,7 +73,12 @@
                 }
             ],
             "networks": {
-                "media-stack": {}
+                "media-stack": {
+                    "aliases": [
+                        "danish-intelligence",
+                        "dksubs-proxy"
+                    ]
+                }
             }
         }
     }

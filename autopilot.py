@@ -49,7 +49,7 @@ def _read_arr_key(name: str) -> str:
 
 
 RADARR_KEY = _clean_env("RADARR_APIKEY") or _clean_env("RADARR_API_KEY") or _read_arr_key("radarr")
-PROWLARR_KEY = _clean_env("PROWLARR_APIKEY") or _clean_env("PROWLARR_API_KEY")
+PROWLARR_KEY = _clean_env("PROWLARR_APIKEY") or _clean_env("PROWLARR_API_KEY") or _read_arr_key("prowlarr")
 ALTMOUNT_KEY = _clean_env("ALTMOUNT_APIKEY") or _clean_env("ALTMOUNT_API_KEY")
 
 CORE_SERIES = ["Dragon Ball Z", "Dragon Ball", "Batman", "Asterix", "South Park", "SpongeBob"]

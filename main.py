@@ -29,6 +29,7 @@ import secrets
 import socket
 import sys
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -44,8 +45,30 @@ load_dotenv("/config/.env", override=True) # /config/.env when installed via Cos
 
 VERSION = "6.0"
 
+
+def _clean_env_value(name: str) -> str:
+    value = os.getenv(name, "")
+    return "" if value.startswith("{") and value.endswith("}") else value
+
+
+def _read_prowlarr_api_key() -> str:
+    for path in ("/arr-config/prowlarr/config.xml", "/srv/config/prowlarr/config.xml"):
+        cfg = Path(path)
+        if not cfg.exists():
+            continue
+        try:
+            return ET.parse(cfg).getroot().findtext("ApiKey", default="").strip()
+        except Exception:
+            continue
+    return ""
+
+
 PROWLARR_URL = os.getenv("PROWLARR_URL", "http://Prowlarr:9696").rstrip("/")
-PROWLARR_API_KEY = os.getenv("PROWLARR_API_KEY", "")
+PROWLARR_API_KEY = (
+    _clean_env_value("PROWLARR_API_KEY")
+    or _clean_env_value("PROWLARR_APIKEY")
+    or _read_prowlarr_api_key()
+)
 ALTMOUNT_URL = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
 LISTEN_HOST  = os.getenv("LISTEN_HOST",  "0.0.0.0")
 LISTEN_PORT  = int(os.getenv("LISTEN_PORT",  "9699"))

@@ -7,8 +7,14 @@ services:
     env_file: [master.env]
     volumes:
       - /srv/config/danish-intelligence:/config
+      - /srv/config/prowlarr:/arr-config/prowlarr:ro
+      - /srv/config/radarr:/arr-config/radarr:ro
+      - /srv/config/sonarr:/arr-config/sonarr:ro
     networks:
-      - media-stack
+      media-stack:
+        aliases:
+          - danish-intelligence
+          - dksubs-proxy
 
 networks:
   media-stack:

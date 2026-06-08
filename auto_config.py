@@ -57,6 +57,7 @@ PROXY_PORT = _PROXY_PARSED.port or (443 if _PROXY_PARSED.scheme == "https" else 
 PROXY_USE_SSL = _PROXY_PARSED.scheme == "https"
 LEGACY_PROXY_HOSTS = {"dksubs-proxy", "danish-intelligence", PROXY_HOST}
 ARR_CONFIG_PATHS = {
+    "Prowlarr": ("/arr-config/prowlarr/config.xml", "/srv/config/prowlarr/config.xml"),
     "Radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
     "Sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
 }
@@ -85,6 +86,11 @@ def _set_field(obj: dict[str, Any], name: str, value: Any) -> None:
 
 def _headers(api_key: str) -> dict[str, str]:
     return {"X-Api-Key": api_key, "Content-Type": "application/json"}
+
+
+def _clean_env(name: str) -> str:
+    value = os.getenv(name, "")
+    return "" if value.startswith("{") and value.endswith("}") else value
 
 
 def _get_json(session: requests.Session, url: str, api_key: str) -> Any:
@@ -164,7 +170,7 @@ def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_ke
 
 def _first_working_arr_key(session: requests.Session, app_name: str, url: str, prowlarr_app_key: str = "") -> str:
     env_names = [f"{app_name.upper()}_API_KEY", f"{app_name.upper()}_APIKEY"]
-    candidates = [os.getenv(name, "") for name in env_names]
+    candidates = [_clean_env(name) for name in env_names]
     candidates.append(_read_arr_config_key(app_name))
     # Prowlarr often stores stale 8-char app keys; keep it last as a compatibility fallback.
     if prowlarr_app_key:
@@ -181,7 +187,8 @@ def _first_working_arr_key(session: requests.Session, app_name: str, url: str, p
 
 
 def _read_arr_config_key(app_name: str) -> str:
-    for path in ARR_CONFIG_PATHS.get(app_name, ()):
+    key = app_name[:1].upper() + app_name[1:].lower()
+    for path in ARR_CONFIG_PATHS.get(key, ()):
         cfg = Path(path)
         if not cfg.exists():
             continue
@@ -193,6 +200,14 @@ def _read_arr_config_key(app_name: str) -> str:
         except Exception as exc:
             print(f"[Core] Auto-Config: could not read {path}: {exc}", flush=True)
     return ""
+
+
+def _prowlarr_api_key() -> str:
+    return (
+        _clean_env("PROWLARR_API_KEY")
+        or _clean_env("PROWLARR_APIKEY")
+        or _read_arr_config_key("Prowlarr")
+    )
 
 
 def _arr_reachable(session: requests.Session, url: str, api_key: str) -> bool:
@@ -414,9 +429,9 @@ def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prow
 
 def paint() -> dict[str, int]:
     prowlarr_url = os.getenv("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
-    prowlarr_key = os.getenv("PROWLARR_API_KEY", "")
+    prowlarr_key = _prowlarr_api_key()
     if not prowlarr_key:
-        raise RuntimeError("PROWLARR_API_KEY is not set")
+        raise RuntimeError("Prowlarr API key is not set and no mounted Prowlarr config.xml was found")
 
     session = requests.Session()
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)

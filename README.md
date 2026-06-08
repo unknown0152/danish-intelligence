@@ -12,10 +12,12 @@ automatically configures the local Arr stack.
 - Proxies Prowlarr Newznab requests through Danish release intelligence.
 - Detects Danish audio and Danish subtitles from release titles, NFOs, and
   indexer metadata.
-- Exposes OldBoys as a Newznab-compatible proxy endpoint.
+- Exposes OldBoys as an optional Newznab-compatible proxy endpoint.
 - Runs DanskArr autopilot on a schedule.
 - Paints Danish Custom Formats and Quality Profiles into Radarr and Sonarr.
-- Rewires Radarr/Sonarr indexers to use `http://danish-intelligence:9699`.
+- Rewires Radarr/Sonarr indexers and AltMount download clients to use
+  `http://danish-intelligence:9699`.
+- Keeps the legacy `dksubs-proxy` hostname as a network alias during migration.
 
 ## Cosmos Install
 
@@ -31,11 +33,11 @@ Image:
 ghcr.io/unknown0152/danish-intelligence:latest
 ```
 
-The Cosmos installer asks for:
+The Cosmos installer fields are optional:
 
-- `ProwlarrKey`: Prowlarr API key.
-- `OldBoysToken`: OldBoys API token.
-- `OldBoysRSS`: OldBoys RSS key / RID.
+- `ProwlarrKey`: Prowlarr API key, only needed if the Prowlarr config folder is not mounted.
+- `OldBoysToken`: OldBoys API token, only needed for the OldBoys proxy.
+- `OldBoysRSS`: OldBoys RSS key / RID, only needed for the OldBoys proxy.
 
 On startup, the service waits briefly for the Arrs, then configures Radarr and
 Sonarr through their HTTP APIs. It discovers Arr API keys from read-only config
@@ -89,8 +91,13 @@ docker logs danish-intelligence
 Healthy startup logs should include:
 
 ```text
-[Core] OldBoys components initialized
 [Core] Auto-Config: SUCCESS.
+```
+
+If OldBoys credentials are provided, startup logs should also include:
+
+```text
+[Core] OldBoys components initialized
 ```
 
 Health endpoint:
@@ -105,15 +112,27 @@ Expected response:
 {"status": "ok", "service": "danish-intelligence"}
 ```
 
+Setup status endpoint:
+
+```bash
+docker exec danish-intelligence python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9699/status.json').read().decode())"
+```
+
 ## Troubleshooting
 
 If Auto-Config does not run:
 
-- Confirm `PROWLARR_API_KEY` is set inside the container.
+- Confirm `PROWLARR_API_KEY` is set inside the container, or that Prowlarr config
+  is mounted read-only at `/arr-config/prowlarr`.
 - Confirm the container can reach `prowlarr`, `radarr`, and `sonarr` by Docker DNS.
-- Confirm Radarr and Sonarr config paths are mounted read-only at:
+- Confirm Arr config paths are mounted read-only at:
+  - `/arr-config/prowlarr`
   - `/arr-config/radarr`
   - `/arr-config/sonarr`
+
+If `/ob/health` reports `disabled`, add `OldBoysToken` and `OldBoysRSS` in
+Cosmos and recreate the container. The rest of the service can run without
+OldBoys.
 
 If OldBoys fails with `PROXY_API_KEY` missing, update to the latest image. The
 service now persists a fallback key in `/config/proxy_api_key` when Cosmos does

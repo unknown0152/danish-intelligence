@@ -1,12 +1,12 @@
 {
-  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=5",
+  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=6",
   "showcase": [],
   "all": [
     {
       "id": "danish-intelligence",
       "name": "Danish Intelligence",
       "description": "Unified Danish Media Stack Core",
-      "longDescription": "<p><b>Danish Intelligence Core</b> is a unified service that handles everything Danish for your media stack in one place. It replaces three separate containers (dksubs-proxy, ob-proxy, and danskarr) with a single, high-performance engine.</p><p><b>Post-install</b>: The service automatically discovers your Arrs and paints Custom Formats and Quality Profiles automatically.</p>",
+      "longDescription": "<p><b>Danish Intelligence Core</b> is a unified service that handles everything Danish for your media stack in one place. It replaces three separate containers (dksubs-proxy, ob-proxy, and danskarr) with a single, high-performance engine.</p><p><b>One-click setup</b>: The service can auto-discover Prowlarr, Radarr, and Sonarr API keys from mounted Cosmos config folders, rewires legacy dksubs-proxy URLs, paints Custom Formats and Quality Profiles, and exposes <code>/status</code> for post-install checks. OldBoys credentials are optional.</p>",
       "url": "https://github.com/unknown0152/danish-intelligence",
       "tags": [
         "radarr",
@@ -22,7 +22,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json?v=4"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-compose.json?v=6"
     },
     {
       "id": "altmount-danish",

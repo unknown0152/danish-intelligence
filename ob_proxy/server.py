@@ -38,6 +38,8 @@ def _enclosure_base(request: web.Request, cfg: Config) -> str:
 
 
 def _require_apikey(request: web.Request) -> web.Response | None:
+    if not request.app.get("oldboys_enabled"):
+        return web.Response(status=503, text="oldboys disabled")
     cfg: Config = request.app["config"]
     if request.query.get("apikey") != cfg.proxy_api_key:
         return web.Response(status=401, text="unauthorized")
@@ -45,7 +47,9 @@ def _require_apikey(request: web.Request) -> web.Response | None:
 
 
 async def handle_health(request: web.Request) -> web.Response:
-    return web.Response(text="ok")
+    if not request.app.get("oldboys_enabled"):
+        return web.json_response({"status": "disabled", "service": "oldboys"})
+    return web.json_response({"status": "ok", "service": "oldboys"})
 
 
 async def handle_api(request: web.Request) -> web.Response:
@@ -146,6 +150,7 @@ def create_app(
     """Build the aiohttp app. Dependencies may be injected for testing."""
     app = web.Application()
     app["config"] = config
+    app["oldboys_enabled"] = bool(config.ob_api_token and config.ob_rid)
 
     owns_client = client is None
     if client is None:
