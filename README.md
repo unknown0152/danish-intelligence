@@ -144,6 +144,8 @@ For AltMount integration:
 - Its SAB-compatible API should be enabled at `/sabnzbd`.
 - Danish Intelligence defaults `ALTMOUNT_URL` to
   `http://altmount:8080/sabnzbd`.
+- Radarr/Sonarr download clients should point to Danish Intelligence:
+  host `danish-intelligence`, port `9699`, URL base `/altmount`.
 - If `ALTMOUNT_APIKEY` is not supplied, DanskArr autopilot will try AltMount's
   ARR-credential auth path using the local Radarr API key.
 

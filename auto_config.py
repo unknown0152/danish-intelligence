@@ -56,6 +56,7 @@ PROXY_HOST = _PROXY_PARSED.hostname or "danish-intelligence"
 PROXY_PORT = _PROXY_PARSED.port or (443 if _PROXY_PARSED.scheme == "https" else 80)
 PROXY_USE_SSL = _PROXY_PARSED.scheme == "https"
 LEGACY_PROXY_HOSTS = {"dksubs-proxy", "danish-intelligence", PROXY_HOST}
+ALTMOUNT_SOURCE_HOSTS = {"altmount", "altmount-danish-edition", "nzbdav"}
 ARR_CONFIG_PATHS = {
     "Prowlarr": ("/arr-config/prowlarr/config.xml", "/srv/config/prowlarr/config.xml"),
     "Radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
@@ -142,8 +143,11 @@ def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
 
     return (
         "altmount" in name
+        or "nzbdav" in name
         or host in LEGACY_PROXY_HOSTS
+        or host in ALTMOUNT_SOURCE_HOSTS
         or url_base == "altmount"
+        or (url_base == "sabnzbd" and (host in ALTMOUNT_SOURCE_HOSTS or "nzbdav" in name))
         or str(port) == str(PROXY_PORT)
     )
 

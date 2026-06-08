@@ -63,7 +63,11 @@
                 "apparmor:unconfined"
             ],
             "networks": {
-                "media-stack": {}
+                "media-stack": {
+                    "aliases": [
+                        "altmount"
+                    ]
+                }
             }
         }
     }
