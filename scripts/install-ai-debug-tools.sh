@@ -60,6 +60,7 @@ shell_quote() {
 
 HOME_DIR="${HOME:-/root}"
 BIN_DIR="${HOME_DIR}/bin"
+APP_DIR="${HOME_DIR}/.local/share/gemini-tools"
 VENV_DIR="${GEMINI_TOOLS_VENV:-${HOME_DIR}/.local/share/gemini-tools-venv}"
 ENV_FILE="${GEMINI_WORKER_ENV_FILE:-${HOME_DIR}/.gemini-worker.env}"
 AGENTS_FILE="${HOME_DIR}/AGENTS.md"
@@ -83,7 +84,7 @@ if ! need_cmd python3; then
   exit 1
 fi
 
-mkdir -p "${BIN_DIR}" "$(dirname "${VENV_DIR}")"
+mkdir -p "${BIN_DIR}" "${APP_DIR}" "$(dirname "${VENV_DIR}")"
 
 if [ ! -x "${VENV_DIR}/bin/python" ]; then
   log "Creating Python virtual environment at ${VENV_DIR}..."
@@ -95,7 +96,7 @@ log "Installing Python OpenAI client into helper virtualenv..."
 "${VENV_DIR}/bin/python" -m pip install --upgrade openai >/dev/null
 
 log "Writing ask-gemini..."
-cat > "${BIN_DIR}/ask-gemini" <<'PY'
+cat > "${APP_DIR}/ask_gemini.py" <<'PY'
 #!/usr/bin/env python3
 import argparse
 import os
@@ -155,7 +156,7 @@ except Exception as exc:
 PY
 
 log "Writing gemini-write..."
-cat > "${BIN_DIR}/gemini-write" <<'PY'
+cat > "${APP_DIR}/gemini_write.py" <<'PY'
 #!/usr/bin/env python3
 import argparse
 import os
@@ -211,6 +212,19 @@ except Exception as exc:
     sys.exit(1)
 PY
 
+chmod 0644 "${APP_DIR}/ask_gemini.py" "${APP_DIR}/gemini_write.py"
+
+log "Writing user command wrappers..."
+cat > "${BIN_DIR}/ask-gemini" <<EOF
+#!/usr/bin/env sh
+[ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
+exec "${VENV_DIR}/bin/python" "${APP_DIR}/ask_gemini.py" "\$@"
+EOF
+cat > "${BIN_DIR}/gemini-write" <<EOF
+#!/usr/bin/env sh
+[ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
+exec "${VENV_DIR}/bin/python" "${APP_DIR}/gemini_write.py" "\$@"
+EOF
 chmod 0755 "${BIN_DIR}/ask-gemini" "${BIN_DIR}/gemini-write"
 
 log "Writing system wrappers when possible..."
@@ -218,12 +232,12 @@ if [ -w /usr/local/bin ] || [ "$(id -u)" = "0" ]; then
   cat > /usr/local/bin/ask-gemini <<EOF
 #!/usr/bin/env sh
 [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
-exec "${VENV_DIR}/bin/python" "${BIN_DIR}/ask-gemini" "\$@"
+exec "${VENV_DIR}/bin/python" "${APP_DIR}/ask_gemini.py" "\$@"
 EOF
   cat > /usr/local/bin/gemini-write <<EOF
 #!/usr/bin/env sh
 [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
-exec "${VENV_DIR}/bin/python" "${BIN_DIR}/gemini-write" "\$@"
+exec "${VENV_DIR}/bin/python" "${APP_DIR}/gemini_write.py" "\$@"
 EOF
   chmod 0755 /usr/local/bin/ask-gemini /usr/local/bin/gemini-write
 else
