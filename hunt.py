@@ -13,12 +13,13 @@ from .classification import AUDIO_DK_RE, LOWQ_RE, SUBS_DK_RE, _extract_nfo_media
 from .enrichment import extract_attrs
 from .layers import register_background_task
 from .nfo_fetch import _extract_nzb_id, fetch_nfo, fetch_nfo_direct
+from .tags import NO_DK_TAG
 
 
 async def hunt_danish(content, indexer_id, apikey, session,
                       title_only: bool = False, params: dict | None = None):
     """Returns (xml, probe_results_dict). probe_results maps nzb_id -> tag
-    (or 'NONE') for each NFO probed in this search."""
+    (or NO_DK_TAG) for each NFO probed in this search."""
     params = params or {}
     _metrics["hunt_total"] += 1; found_hits = {}; candidates = []; items = ITEM_RE.findall(content)
     log(f"HUNT: parsed {len(items)} items from indexer {indexer_id}", "INFO")
@@ -61,20 +62,20 @@ async def hunt_danish(content, indexer_id, apikey, session,
                 found_hits[nid] = DK_AUDIO_TITLE
                 _metrics["scene_group_audio_shortcuts"] += 1
                 await cache_set(nid, DK_AUDIO_TITLE, title, source="group")
-                log(f"Scene group shortcut → .DKaudio for {title[:50]}", "DEBUG")
+                log(f"Scene group shortcut -> {DK_AUDIO_TITLE} for {title[:50]}", "DEBUG")
                 continue
             elif sg_verdict == "subs":
                 found_hits[nid] = DK_SUBS_TITLE
                 _metrics["scene_group_subs_skips"] += 1
                 await cache_set(nid, DK_SUBS_TITLE, title, source="group")
-                log(f"Scene group shortcut → .DKOK for {title[:50]}", "DEBUG")
+                log(f"Scene group shortcut -> {DK_SUBS_TITLE} for {title[:50]}", "DEBUG")
                 continue
         # v5.7 PR B: description classifier
         if indexer_id in _desc_classifier_ids:
             desc_m = DESC_RE.search(item_xml)
             if desc_m and len(desc_m.group(1)) >= 100:
                 desc_tag = classify_nfo_text(desc_m.group(1))
-                if desc_tag != "NONE":
+                if desc_tag != NO_DK_TAG:
                     found_hits[nid] = desc_tag
                     _metrics["desc_classifier_hits"] += 1
                     await cache_set(nid, desc_tag, title, source="description")
@@ -138,7 +139,7 @@ async def hunt_danish(content, indexer_id, apikey, session,
             if cached:
                 if cached_media and DKSUBS_PROXY_NFO_MEDIA_TAGS:
                     media_tags_by_nid[nid] = cached_media
-                return nid, cached if cached != "NONE" else (DK_SUBS_TITLE if subs_fallback else "NONE")
+                return nid, cached if cached != NO_DK_TAG else (DK_SUBS_TITLE if subs_fallback else NO_DK_TAG)
 
             text = await fetch_nfo(session, indexer_id, nid, apikey)
 
@@ -148,10 +149,10 @@ async def hunt_danish(content, indexer_id, apikey, session,
                 via_direct = text is not None
 
             if text is None:
-                return nid, DK_SUBS_TITLE if subs_fallback else "NONE"
+                return nid, DK_SUBS_TITLE if subs_fallback else NO_DK_TAG
 
             tag = classify_nfo_text(text)
-            if via_direct and tag != "NONE":
+            if via_direct and tag != NO_DK_TAG:
                 _metrics["nfo_direct_hits"] += 1
                 log(f"NFO direct HIT [{tag}] for {nid} ({title[:60]})", "DEBUG")
             media_tags: list[str] = []
@@ -164,7 +165,7 @@ async def hunt_danish(content, indexer_id, apikey, session,
                     _metrics["nfo_media_tags_injected"] += 1
                     log(f"NFO media tags for {nid} ({title[:50]}): "
                         f"{','.join(media_tags)}", "DEBUG")
-            if tag == "NONE" and subs_fallback:
+            if tag == NO_DK_TAG and subs_fallback:
                 tag = DK_SUBS_TITLE
             await cache_set(nid, tag, title, media_tags=media_tags)
             return nid, tag
@@ -184,7 +185,7 @@ async def hunt_danish(content, indexer_id, apikey, session,
                 if isinstance(r, tuple):
                     nid, tag = r
                     probe_results[nid] = tag
-                    if tag and tag != "NONE":
+                    if tag and tag != NO_DK_TAG:
                         found_hits[nid] = tag
                         dk_hits_this_search += 1
                         if (NFO_EARLY_EXIT_HITS > 0
@@ -254,7 +255,7 @@ async def _handle_learn_imported(request) -> "web.Response":
     subs_langs  = body.get("subtitle_languages") or []
     actual_tag = compute_actual_tag(audio_langs, subs_langs)
 
-    previous_tag = "NONE"
+    previous_tag = NO_DK_TAG
     previous_source = "unknown"
     previous_nzb_id = ""
     if _db:
@@ -266,7 +267,7 @@ async def _handle_learn_imported(request) -> "web.Response":
                 row = await cur.fetchone()
                 if row:
                     previous_nzb_id = row[0] or ""
-                    previous_tag = row[1] or "NONE"
+                    previous_tag = row[1] or NO_DK_TAG
                     previous_source = row[2] or "unknown"
         except Exception as e:
             log(f"/learn/imported lookup failed: {e!r}", "WARN")

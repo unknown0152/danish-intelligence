@@ -5,8 +5,9 @@ import time
 
 import aiosqlite
 
-from .__init__ import CACHE_DB, CACHE_TTL_NEGATIVE, DK_AUDIO_TITLE, DK_SUBS_TITLE, INDEXER_SCORING_ENABLED, INDEXER_SCORING_MIN_PROBES, INDEXER_SCORING_WINDOW, SCENE_GROUP_MIN_RELEASES, _metrics, _scene_group_profiles, log
+from .__init__ import CACHE_DB, CACHE_TTL_NEGATIVE, INDEXER_SCORING_ENABLED, INDEXER_SCORING_MIN_PROBES, INDEXER_SCORING_WINDOW, SCENE_GROUP_MIN_RELEASES, _metrics, _scene_group_profiles, log
 from .classification import normalize_result_tag
+from .tags import AUDIO_TAG_ALIASES, DK_AUDIO_TITLE, DK_SUBS_TITLE, NO_DK_TAG, SCENE_GROUP_RE, SUBS_TAG_ALIASES
 
 
 # Module-level DB connection
@@ -78,6 +79,7 @@ async def cache_init() -> None:
         await _db.execute("CREATE INDEX IF NOT EXISTS idx_nfo_cache_release_name ON nfo_cache (release_name)")
         await _ensure_nfo_cache_media_tags_column(_db)
         await _ensure_nfo_cache_source_column(_db)
+        await _db.execute("CREATE INDEX IF NOT EXISTS idx_nfo_cache_release_tag_source ON nfo_cache (release_name, result_tag, source)")
         await _ensure_classifier_audit_table(_db)
         # v5.6 layer 1: request dedup
         await _db.execute(
@@ -128,7 +130,9 @@ async def cache_init() -> None:
     except Exception as e:
         log(f"Cache error: {e!r}. Fallback to memory.", "ERROR")
         _db = await aiosqlite.connect(":memory:")
-        await _db.execute("CREATE TABLE nfo_cache (nzb_id TEXT PRIMARY KEY, result_tag TEXT NOT NULL, release_name TEXT, scanned_at REAL NOT NULL, media_tags TEXT)")
+        await _db.execute("CREATE TABLE nfo_cache (nzb_id TEXT PRIMARY KEY, result_tag TEXT NOT NULL, release_name TEXT, scanned_at REAL NOT NULL, media_tags TEXT, source TEXT DEFAULT 'unknown')")
+        await _db.execute("CREATE INDEX idx_nfo_cache_release_name ON nfo_cache (release_name)")
+        await _db.execute("CREATE INDEX idx_nfo_cache_release_tag_source ON nfo_cache (release_name, result_tag, source)")
 
 def _decode_media_tags(raw) -> list[str]:
     """Cache-row media_tags column → list of `.NFOxxx` tags."""
@@ -157,27 +161,27 @@ async def cache_get(nzb_id: str, release_name: str = "") -> tuple[str | None, li
             if row:
                 _metrics["cache_hits"] += 1
                 tag, scanned_at, mt_raw = row
-                if tag == "NONE" and time.time() - scanned_at > CACHE_TTL_NEGATIVE:
+                if tag == NO_DK_TAG and time.time() - scanned_at > CACHE_TTL_NEGATIVE:
                     return None, []
                 return normalize_result_tag(tag), _decode_media_tags(mt_raw)
         if release_name:
-            # Cross-nzb_id (same release_name) fallback. .DKaudio is content-
-            # identifying and always safe to propagate. A .DKOK only propagates
-            # when it was AUTHORITATIVELY sourced (real media inspection: NFO /
-            # attr / description / ffprobe). A title- or group-derived .DKOK is
-            # only a *guess* and must NOT propagate by name — otherwise a
-            # title-only indexer's subs tag suppresses an NFO-capable indexer
-            # that could upgrade the SAME release to .DKaudio (the cross-indexer
-            # race that blocks Danish-dubbed shows like Ed, Edd n Eddy). Prefer
-            # audio when both exist. Exact nzb_id hits above are unaffected, so
-            # same-indexer re-polls keep their API savings.
+                # Cross-nzb_id (same release_name) fallback. Danish Audio is
+                # content-identifying and always safe to propagate. Danish
+                # Subtitles only propagates when it was authoritatively sourced
+                # from media inspection, NFO, attr, description, or ffprobe.
+                # A title- or group-derived subtitle tag is
+                # only a *guess* and must NOT propagate by name — otherwise a
+                # title-only indexer's subs tag suppresses an NFO-capable indexer
+                # that could upgrade the same release to Danish Audio. Prefer audio
+                # when both exist. Exact nzb_id hits above are unaffected, so
+                # same-indexer re-polls keep their API savings.
             async with _db.execute(
                 "SELECT result_tag, media_tags FROM nfo_cache "
                 "WHERE release_name = ? AND ("
-                "result_tag = ? OR "
-                "(result_tag = ? AND source IN ('nfo','attr','description','ffprobe'))"
-                ") ORDER BY (result_tag = ?) DESC LIMIT 1",
-                (release_name, DK_AUDIO_TITLE, DK_SUBS_TITLE, DK_AUDIO_TITLE),
+                "result_tag IN (?, ?) OR "
+                "(result_tag IN (?, ?) AND source IN ('nfo','attr','description','ffprobe'))"
+                ") ORDER BY (result_tag IN (?, ?)) DESC LIMIT 1",
+                (release_name, *_AUDIO_TAG_ALIASES, *_SUBS_TAG_ALIASES, *_AUDIO_TAG_ALIASES),
             ) as cur:
                 row = await cur.fetchone()
                 if row:
@@ -243,7 +247,7 @@ async def record_indexer_probes(indexer_id: str, probe_results: dict) -> None:
         await _db.executemany(
             "INSERT INTO indexer_probes (indexer_id, was_dk_hit, probed_at) "
             "VALUES (?, ?, ?)",
-            [(indexer_id, 1 if (tag and tag != "NONE") else 0, now)
+            [(indexer_id, 1 if (tag and tag != NO_DK_TAG) else 0, now)
              for tag in probe_results.values()],
         )
         # Cap at 2x window so we always have full window after pruning.
@@ -280,7 +284,7 @@ async def get_indexer_score(indexer_id: str) -> float:
 
 # ── Scene group learning ─────────────────────────────────────────────────────
 
-_SCENE_GROUP_RE = re.compile(r'-([A-Za-z0-9]+?)(?:\.DK|\.nzb|$)')
+_SCENE_GROUP_RE = SCENE_GROUP_RE
 
 
 async def record_scene_group(release_name: str, tag: str) -> None:
@@ -293,16 +297,17 @@ async def record_scene_group(release_name: str, tag: str) -> None:
     group = m.group(1)
     now = time.time()
     try:
-        col = "audio_count" if tag == ".DKaudio" else "subs_count" if tag == ".DKOK" else "none_count"
+        tag = normalize_result_tag(tag)
+        col = "audio_count" if tag == DK_AUDIO_TITLE else "subs_count" if tag == DK_SUBS_TITLE else "none_count"
         await _db.execute(
             f"INSERT INTO scene_group_stats (group_name, audio_count, subs_count, none_count, last_seen) "
             f"VALUES (?, ?, ?, ?, ?) "
             f"ON CONFLICT(group_name) DO UPDATE SET "
             f"{col} = {col} + 1, last_seen = ?",
             (group,
-             1 if tag == ".DKaudio" else 0,
-             1 if tag == ".DKOK" else 0,
-             1 if tag not in (".DKaudio", ".DKOK") else 0,
+             1 if tag == DK_AUDIO_TITLE else 0,
+             1 if tag == DK_SUBS_TITLE else 0,
+             1 if tag not in (DK_AUDIO_TITLE, DK_SUBS_TITLE) else 0,
              now, now),
         )
         await _db.commit()
@@ -351,7 +356,8 @@ async def backfill_scene_groups_from_cache() -> int:
     try:
         async with _db.execute(
             "SELECT release_name, result_tag FROM nfo_cache "
-            "WHERE result_tag IN ('.DKaudio', '.DKOK') AND release_name IS NOT NULL"
+            "WHERE result_tag IN (?, ?, ?, ?) AND release_name IS NOT NULL",
+            (*_AUDIO_TAG_ALIASES, *_SUBS_TAG_ALIASES),
         ) as cur:
             rows = await cur.fetchall()
 
@@ -363,9 +369,10 @@ async def backfill_scene_groups_from_cache() -> int:
             g = m.group(1)
             if g not in groups:
                 groups[g] = {"audio": 0, "subs": 0}
-            if tag == ".DKaudio":
+            tag = normalize_result_tag(tag)
+            if tag == DK_AUDIO_TITLE:
                 groups[g]["audio"] += 1
-            else:
+            elif tag == DK_SUBS_TITLE:
                 groups[g]["subs"] += 1
 
         now = time.time()

@@ -198,15 +198,13 @@ async def _handle_inner(request, indexer_id, params, apikey, dedup_key):
                 await record_indexer_probes(indexer_id, probe_results)
             if ext_id and DKSUBS_PROXY_V56_FEATURES:
                 # A "DK hit" is ANY Danish tag applied to the response, not just
-                # NFO-probe outcomes. Releases tagged .DKaudio/.DKOK via the
-                # title / scene-group / attr shortcuts never enter probe_results,
-                # so keying the verdict off probe_results alone wrongly counts a
-                # reliably-Danish title (e.g. a NORDiC kids show shortcut-tagged
-                # .DKOK) as a zero-DK search and suppresses its NFO probing for
-                # days — the bug that blocked Ed, Edd n Eddy. Scan the tagged
-                # output instead. We also run this even when verdict_suppressed,
-                # so a poisoned 'no_dk' verdict self-heals the instant Danish
-                # content shows up again (a suppressed search still title-tags).
+                # NFO-probe outcomes. Releases tagged by title / scene-group /
+                # attr shortcuts never enter probe_results, so keying the verdict
+                # off probe_results alone wrongly counts a reliably-Danish title
+                # as a zero-DK search and suppresses its NFO probing for days.
+                # Scan the tagged output instead. We also run this even when
+                # verdict_suppressed, so a poisoned 'no_dk' verdict self-heals
+                # the instant Danish content shows up again.
                 had_dk_hit = (DK_AUDIO_TITLE in content) or (DK_SUBS_TITLE in content)
                 await update_movie_verdict(
                     ext_id, ext_id_type, media_type, had_dk_hit

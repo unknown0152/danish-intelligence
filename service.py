@@ -8,24 +8,52 @@ import time
 import logging
 import subprocess
 import xml.etree.ElementTree as ET
+import importlib.util
 from pathlib import Path
 
 from aiohttp import web
 import aiohttp
 
+PACKAGE_NAME = "danish_intelligence"
+PACKAGE_DIR = Path(__file__).resolve().parent
+
+
+def _load_package_alias() -> None:
+    """Allow `python3 service.py` from /app while modules use relative imports."""
+    if PACKAGE_NAME in sys.modules:
+        return
+    spec = importlib.util.spec_from_file_location(
+        PACKAGE_NAME,
+        PACKAGE_DIR / "__init__.py",
+        submodule_search_locations=[str(PACKAGE_DIR)],
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not initialize danish_intelligence package")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[PACKAGE_NAME] = module
+    sys.modules[f"{PACKAGE_NAME}.__init__"] = module
+    spec.loader.exec_module(module)
+
+
+_load_package_alias()
+
 # 1. Import Danish Intelligence modular logic
-from app import handle, on_startup as proxy_startup, on_cleanup as proxy_cleanup, VERSION, _metrics
-from hunt import _handle_learn_imported
+from danish_intelligence import app as main_proxy
+from danish_intelligence.hunt import _handle_learn_imported
+from danish_intelligence.autopilot import run_autopilot
+from danish_intelligence.auto_config import paint as paint_auto_config
+
+handle = main_proxy.handle
+proxy_startup = main_proxy.on_startup
+proxy_cleanup = main_proxy.on_cleanup
+VERSION = main_proxy.VERSION
+_metrics = main_proxy._metrics
 
 # 2. Import ob-proxy core logic
 from ob_proxy.config import Config as OBConfig
 from ob_proxy.obclient import OBClient
 from ob_proxy.sizecache import SizeCache
 import ob_proxy.server as ob_server
-
-# 3. Import danskarr logic
-from autopilot import run_autopilot
-from auto_config import paint as paint_auto_config
 
 # Silence noise
 logging.getLogger('aiohttp.access').setLevel(logging.WARNING)

@@ -156,7 +156,7 @@ _session: aiohttp.ClientSession | None = None
 async def get_session() -> aiohttp.ClientSession:
     global _session
     if _session is None or _session.closed:
-        _session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30), connector=aiohttp.TCPConnector(limit=GLOBAL_CONCURRENCY), headers={"User-Agent": f"DKSubs-Proxy/{VERSION}"})
+        _session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30), connector=aiohttp.TCPConnector(limit=GLOBAL_CONCURRENCY), headers={"User-Agent": f"Danish-Intelligence/{VERSION}"})
     return _session
 
 

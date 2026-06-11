@@ -2,7 +2,7 @@
 
 Danish Intelligence is a single Cosmos-ready service for Danish media automation.
 
-It replaces the previous split-container setup for DKSubs proxying, OldBoys
+It replaces the previous split-container setup for Danish release proxying, OldBoys
 translation, and DanskArr autopilot with one container that can self-configure a
 local Prowlarr/Radarr/Sonarr stack.
 
@@ -24,4 +24,3 @@ Recommended topics:
 ```text
 cosmos, radarr, sonarr, prowlarr, newznab, danish, media-server, docker
 ```
-

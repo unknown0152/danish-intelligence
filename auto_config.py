@@ -18,11 +18,36 @@ from urllib.parse import urlparse, urlunparse
 
 import requests
 
+try:
+    from .tags import (
+        CF_DANISH_AUDIO,
+        CF_DANISH_SUBTITLES,
+        DK_AUDIO_TITLE,
+        DK_SUBS_TITLE,
+        LEGACY_CF_NAMES,
+        LEGACY_DK_AUDIO_TITLE,
+        LEGACY_DK_SUBS_TITLE,
+        LEGACY_PROFILE_NAMES,
+        PROFILE_DANISH_AUDIO,
+        PROFILE_DANISH_SUBTITLES,
+    )
+except ImportError:  # Allows `python3 auto_config.py` during manual debugging.
+    from tags import (
+        CF_DANISH_AUDIO,
+        CF_DANISH_SUBTITLES,
+        DK_AUDIO_TITLE,
+        DK_SUBS_TITLE,
+        LEGACY_CF_NAMES,
+        LEGACY_DK_AUDIO_TITLE,
+        LEGACY_DK_SUBS_TITLE,
+        LEGACY_PROFILE_NAMES,
+        PROFILE_DANISH_AUDIO,
+        PROFILE_DANISH_SUBTITLES,
+    )
 
 MANAGED_CF_NAMES = {
-    "Danish Audio",
-    "Danish Subtitles",
-    "NORDIC.ENG",
+    CF_DANISH_AUDIO,
+    CF_DANISH_SUBTITLES,
     "TrueHD Atmos",
     "DTS-X",
     "TrueHD",
@@ -37,7 +62,6 @@ MANAGED_CF_NAMES = {
     "HDR10+",
     "HEVC",
 }
-MANAGED_PROFILE_NAMES = {"NORDIC", "Danish Audio", "Danish Subtitles"}
 DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
 PROXY_URL = os.getenv("PROXY_URL", "http://danish-intelligence:9699").rstrip("/")
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
@@ -245,8 +269,8 @@ def _cf_payload(name: str, pattern: str, include_rename: bool = False, required:
 
 def _managed_cf_payloads() -> list[dict[str, Any]]:
     return [
-        _cf_payload("Danish Audio", r"(?:\[Danish Audio\]|\.DanishAudio\b|\.DKaudio\b)", include_rename=True),
-        _cf_payload("Danish Subtitles", r"(?:\[Danish Subtitles\]|\.DanishSubs\b|\.DKOK\b)", include_rename=True),
+        _cf_payload(CF_DANISH_AUDIO, rf"(?:\[Danish Audio\]|{re.escape(DK_AUDIO_TITLE)}\b|{re.escape(LEGACY_DK_AUDIO_TITLE)}\b)", include_rename=True),
+        _cf_payload(CF_DANISH_SUBTITLES, rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b)", include_rename=True),
         {
             "id": 0,
             "name": "TrueHD Atmos",
@@ -306,7 +330,7 @@ def _managed_cf_payloads() -> list[dict[str, Any]]:
 def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple[int, int]:
     api = f"{app.url}/api/v3"
     old_formats = _get_json(session, f"{api}/customformat", app.api_key)
-    old_ids = [fmt["id"] for fmt in old_formats if fmt.get("name") in MANAGED_CF_NAMES or fmt.get("name") in {"DKAudio", "DKSubs"}]
+    old_ids = [fmt["id"] for fmt in old_formats if fmt.get("name") in MANAGED_CF_NAMES or fmt.get("name") in LEGACY_CF_NAMES]
     for fmt_id in old_ids:
         _delete(session, f"{api}/customformat/{fmt_id}", app.api_key)
 
@@ -321,9 +345,19 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
     }
 
     profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
+    legacy_profile_ids = [
+        int(profile["id"])
+        for profile in profiles
+        if profile.get("name") in LEGACY_PROFILE_NAMES and len(profiles) > 1
+    ]
+    for profile_id in legacy_profile_ids:
+        _delete(session, f"{api}/qualityprofile/{profile_id}", app.api_key)
+    if legacy_profile_ids:
+        profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
+
     scores = {
-        "Danish Audio": 10000,
-        "Danish Subtitles": 10000,
+        CF_DANISH_AUDIO: 10000,
+        CF_DANISH_SUBTITLES: 10000,
         "TrueHD Atmos": 2000,
         "DTS-X": 1800,
         "TrueHD": 1600,
@@ -347,8 +381,9 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
 
     profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
     if profiles:
-        _upsert_profile(session, app, profiles, "Danish Audio", {"Danish Audio": 10000, "Danish Subtitles": 0, **{k: v for k, v in scores.items() if k not in {"Danish Audio", "Danish Subtitles"}}}, cf_ids, valid_cf_ids)
-        _upsert_profile(session, app, profiles, "Danish Subtitles", scores, cf_ids, valid_cf_ids)
+        codec_scores = {k: v for k, v in scores.items() if k not in {CF_DANISH_AUDIO, CF_DANISH_SUBTITLES}}
+        _upsert_profile(session, app, profiles, PROFILE_DANISH_AUDIO, {CF_DANISH_AUDIO: 10000, CF_DANISH_SUBTITLES: 0, **codec_scores}, cf_ids, valid_cf_ids)
+        _upsert_profile(session, app, profiles, PROFILE_DANISH_SUBTITLES, {CF_DANISH_AUDIO: 0, CF_DANISH_SUBTITLES: 10000, **codec_scores}, cf_ids, valid_cf_ids)
 
     return len(cf_ids), 2 if profiles else 0
 

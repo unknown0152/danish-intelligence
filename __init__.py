@@ -23,6 +23,7 @@ import aiohttp
 import aiosqlite
 from aiohttp import web
 from dotenv import load_dotenv
+from .tags import DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, PROXY_TAG_RE, SCENE_GROUP_RE
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ SCENE_GROUP_MIN_RELEASES    = int(os.getenv("SCENE_GROUP_MIN_RELEASES",      "10
 SCENE_GROUP_ENABLED         = _env_bool("SCENE_GROUP_ENABLED", True)
 
 _scene_group_profiles: dict[str, dict] = {}
-_SCENE_GROUP_RE = re.compile(r'-([A-Za-z0-9]+?)(?:\.DK|\.nzb|$)')
+_SCENE_GROUP_RE = SCENE_GROUP_RE
 
 def _load_scene_groups():
     global _scene_group_profiles
@@ -256,17 +257,6 @@ ATTR_DK_RE = re.compile(r"\b(danish|dansk|nordic|dan|da)\b", re.I)
 
 # ── v6.1 Layer 3: release-name normalization and metadata persistence ─────────
 
-# Regex to find proxy tags in filenames. Matches:
-# - .DKaudio / .DKOK (Legacy)
-# - .DanishAudio / .DanishSubs (Audit standard)
-# - [Danish Audio] / [Danish Subtitles] (Arr renaming standard)
-_PROXY_TAG_RE = re.compile(r'\.(DKOK|DKaudio|DanishAudio|DanishSubs)\b|\[Danish Audio\]|\[Danish Subtitles\]', re.I)
+_PROXY_TAG_RE = PROXY_TAG_RE
 _EXT_RE = re.compile(r'\.(mkv|mp4|avi|nfo|nzb)$', re.I)
 _WS_RE = re.compile(r'\s+')
-
-# Standard tags used for injection
-DK_AUDIO_TITLE = ".DanishAudio"
-DK_SUBS_TITLE  = ".DanishSubs"
-
-# Legacy aliases for backward compatibility
-DK_TAG_TITLE = DK_SUBS_TITLE

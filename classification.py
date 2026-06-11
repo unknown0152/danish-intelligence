@@ -4,7 +4,8 @@ import os
 import re
 from pathlib import Path
 
-from .__init__ import ATTR_DK_RE, CATEGORY_ATTR_RE, CATEGORY_RE, DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, ITEM_RE, MIN_RELEASE_SIZE, MIN_RELEASE_SIZE_MOVIE, MIN_RELEASE_SIZE_TV, _PROXY_TAG_RE, _EXT_RE, _WS_RE, _metrics, log
+from .__init__ import ATTR_DK_RE, CATEGORY_ATTR_RE, CATEGORY_RE, ITEM_RE, MIN_RELEASE_SIZE, MIN_RELEASE_SIZE_MOVIE, MIN_RELEASE_SIZE_TV, _PROXY_TAG_RE, _EXT_RE, _WS_RE, _metrics, log
+from .tags import DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, LEGACY_DK_AUDIO_TITLE, LEGACY_DK_SUBS_TITLE, NO_DK_TAG, normalize_dk_tag
 
 
 # ── Scandinavian spelling-fold ───────────────────────────────────────────────
@@ -128,7 +129,7 @@ AUDIO_DK_RE  = re.compile(
     r"(dk|dan)[\.\-_\s]*multi|"
     # Bare DANISH/DANSK: only count as AUDIO when NOT immediately followed by
     # a SUBS/SUBTITLES qualifier. Prevents `Movie.DANISH.SUBS.1080p` from
-    # being tagged `.DKaudio` when it's actually subs-only.
+    # being tagged `.DanishAudio` when it's actually subs-only.
     r"(danish|dansk)(?![\.\-_\s]*subs?\b|[\.\-_\s]*subtitles?\b)"
     r")\b",
     re.I,
@@ -286,30 +287,30 @@ def _classify_dk_proximity(text: str) -> tuple[bool, bool]:
 
 
 def classify_nfo_text(text: str) -> str:
-    """Classify NFO text into DK_AUDIO_NFO / DK_SUBS_NFO / "NONE"."""
+    """Classify NFO text into DK_AUDIO_NFO / DK_SUBS_NFO / NO_DK_TAG."""
     if not text:
-        return "NONE"
+        return NO_DK_TAG
     audio_hit, subs_hit = _classify_dk_proximity(text)
     if audio_hit:
         return DK_AUDIO_NFO
     if subs_hit:
         return DK_SUBS_NFO
-    return "NONE"
+    return NO_DK_TAG
 
 
 # ISO 639 + colloquial variants that count as Danish in ffprobe output.
 _DANISH_LANG_CODES = frozenset({"dan", "dansk", "danish", "da"})
 
 
-# v5.7: strip the proxy's appended DK + NFO media tags from a release name
+# Strip the proxy's appended DK + NFO media tags from a release name.
 _PROXY_SUFFIX_STRIP_RE = re.compile(
-    r"(?:\.DKaudio|\.DKOK)(?:\.NFO[A-Za-z0-9]+)*\s*$",
+    rf"(?:{re.escape(DK_AUDIO_TITLE)}|{re.escape(DK_SUBS_TITLE)}|{re.escape(LEGACY_DK_AUDIO_TITLE)}|{re.escape(LEGACY_DK_SUBS_TITLE)}|\s*\[Danish Audio\]|\s*\[Danish Subtitles\])(?:\.NFO[A-Za-z0-9]+)*\s*$",
     re.I,
 )
 
 
 def strip_proxy_suffix(release_name: str) -> str:
-    """Remove the proxy's appended .DKaudio/.DKOK + .NFOxxx tags from the
+    """Remove the proxy's appended DK marker + .NFOxxx tags from the
     end of a release name. Returns the canonical original title."""
     return _PROXY_SUFFIX_STRIP_RE.sub("", release_name or "")
 
@@ -323,24 +324,26 @@ def compute_actual_tag(audio_languages: list[str],
             for l in (langs or [])
         )
     if has_dk(audio_languages):
-        return ".DKaudio"
+        return DK_AUDIO_TITLE
     if has_dk(subtitle_languages):
-        return ".DKOK"
-    return "NONE"
+        return DK_SUBS_TITLE
+    return NO_DK_TAG
 
 
 def classify_mismatch(predicted: str, actual: str) -> str:
     """Return one of: agreement / upgrade / missed_dkaudio / false_dkaudio /
     false_dkok. Used by /learn/imported to label audit rows."""
+    predicted = normalize_result_tag(predicted)
+    actual = normalize_result_tag(actual)
     if predicted == actual:
         return "agreement"
-    if actual == ".DKaudio" and predicted == ".DKOK":
+    if actual == DK_AUDIO_TITLE and predicted == DK_SUBS_TITLE:
         return "upgrade"
-    if actual in (".DKaudio", ".DKOK") and predicted == "NONE":
+    if actual in (DK_AUDIO_TITLE, DK_SUBS_TITLE) and predicted == NO_DK_TAG:
         return "missed_dkaudio"
-    if predicted == ".DKaudio" and actual in (".DKOK", "NONE"):
+    if predicted == DK_AUDIO_TITLE and actual in (DK_SUBS_TITLE, NO_DK_TAG):
         return "false_dkaudio"
-    if predicted == ".DKOK" and actual == "NONE":
+    if predicted == DK_SUBS_TITLE and actual == NO_DK_TAG:
         return "false_dkok"
     return "other"
 
@@ -444,9 +447,4 @@ def is_native_dk_title(title: str) -> bool:
 
 
 def normalize_result_tag(tag: str) -> str:
-    # Pass-through for new granular tags; legacy [DKOK:*] entries collapse to subs.
-    if tag == "[DKOK:Title]":
-        return DK_SUBS_TITLE
-    if tag == "[DKOK:NFO]":
-        return DK_SUBS_NFO
-    return tag
+    return normalize_dk_tag(tag)

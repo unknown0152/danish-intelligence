@@ -2,7 +2,7 @@
 
 Unified Danish media-stack core for Cosmos, Prowlarr, Radarr, and Sonarr.
 
-Danish Intelligence combines DKSubs proxying, OldBoys translation, and DanskArr
+Danish Intelligence combines Danish release proxying, OldBoys translation, and DanskArr
 autopilot behavior into one container. It is designed for Cosmos Cloud Market
 installs where the container starts once, joins the media network, and
 automatically configures the local Arr stack.
@@ -60,8 +60,8 @@ network.
 
 Each startup paint pass manages these Custom Formats:
 
-- `DKAudio`
-- `DKSubs`
+- `Danish Audio`
+- `Danish Subtitles`
 - `TrueHD Atmos`
 - `DTS-X`
 - `TrueHD`
@@ -70,11 +70,33 @@ Each startup paint pass manages these Custom Formats:
 - `EAC3`
 - `DTS`
 - `AAC`
+- `DV`
+- `HDR`
+- `HDR10`
+- `HDR10+`
+- `HEVC`
 
 It also creates or updates:
 
-- `Danish Audio`
-- `Danish Subtitles`
+- `Danish Audio` profile: `minFormatScore=10000`, `cutoffFormatScore=0`, Danish Audio `10000`, Danish Subtitles `0`.
+- `Danish Subtitles` profile: `minFormatScore=10000`, `cutoffFormatScore=0`, Danish Subtitles `10000`, Danish Audio `0`.
+
+The proxy emits `.DanishAudio` and `.DanishSubs` markers. Legacy `.DKaudio` and
+`.DKOK` markers are accepted only as compatibility aliases.
+
+## Code Map
+
+- `tags.py`: single source of truth for Danish markers, Arr CF names, profile
+  names, and legacy aliases.
+- `auto_config.py`: Cosmos-safe painter for Arr naming, root folders, CFs,
+  profiles, proxy indexers, Prowlarr sync hardening, and AltMount clients.
+- `app.py`: Newznab proxy request handler and status/health endpoints.
+- `hunt.py`: Danish release detection pipeline and import-learning endpoint.
+- `classification.py`: title, NFO, ffprobe, and mismatch classification helpers.
+- `cache.py`: SQLite cache, request learning, indexer scoring, and scene-group
+  learning.
+- `service.py`: container entrypoint that combines the proxy, OldBoys, autopilot,
+  and auto-painter.
 
 Prowlarr application sync is set to `addOnly` so Prowlarr does not overwrite the
 proxy URLs in Radarr/Sonarr.

@@ -173,7 +173,7 @@ async def _search_rate_limit_ok(indexer_id: str) -> bool:
 _indexer_configs: dict[str, dict] = {}  # str(indexer_id) -> {apikey, baseUrl}
 
 async def load_indexer_configs(session) -> None:
-    """Load per-indexer API keys and base URLs from env vars written by setup-proxy.sh."""
+    """Load per-indexer API keys/base URLs from env or Prowlarr REST."""
     global _indexer_configs
     configs: dict[str, dict] = {}
 
@@ -203,7 +203,7 @@ async def load_indexer_configs(session) -> None:
                 baseurl = next((f["value"] for f in ix.get("fields", []) if f["name"] == "baseUrl"), "")
                 configs[iid] = {"apikey": "", "baseUrl": baseurl.rstrip("/")}
             _indexer_configs = configs
-            log(f"Loaded baseUrls for {len(configs)} indexers from Prowlarr REST API (apikeys masked — run setup-proxy.sh)", "WARN")
+            log(f"Loaded baseUrls for {len(configs)} indexers from Prowlarr REST API (apikeys masked)", "WARN")
     except Exception as e:
         log(f"Could not load indexer configs: {e!r}", "WARN")
 

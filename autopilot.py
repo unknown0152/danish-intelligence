@@ -9,6 +9,11 @@ from urllib.parse import urlparse, urlunparse
 
 import requests
 
+try:
+    from .tags import CF_DANISH_AUDIO, DK_AUDIO_TITLE
+except ImportError:  # Allows `python3 autopilot.py` during manual debugging.
+    from tags import CF_DANISH_AUDIO, DK_AUDIO_TITLE
+
 
 RADARR_URL = os.environ.get("RADARR_URL", "http://radarr:7878").rstrip("/")
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
@@ -217,7 +222,7 @@ def run_autopilot(dry_run: bool = True) -> None:
         if not oldboys_indexer:
             print("DanskArr Autopilot skipped: OldBoys indexer not found in Radarr.")
             return
-        dk_audio_format = _custom_format(session, "DKAudio")
+        dk_audio_format = _custom_format(session, CF_DANISH_AUDIO)
     except requests.RequestException as e:
         print(f"DanskArr Autopilot skipped: {e}")
         return
@@ -244,7 +249,7 @@ def run_autopilot(dry_run: bool = True) -> None:
 
             title = title_m.group(1)
             guid = guid_m.group(1)
-            if ".DKaudio" not in title:
+            if DK_AUDIO_TITLE not in title:
                 continue
 
             for movie in targets:
