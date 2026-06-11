@@ -77,3 +77,13 @@ def build_ob_params(
     params["perPage"] = MAX_PER_PAGE
 
     return params
+
+
+def requested_ob_categories(query: Mapping[str, str], cat_map: CategoryMap) -> set[int]:
+    """Return OldBoys category ids requested by the Newznab ``cat`` parameter."""
+    cats: list[int] = []
+    for raw in (query.get("cat") or "").split(","):
+        raw = raw.strip()
+        if raw.isdigit():
+            cats.append(int(raw))
+    return set(cat_map.newznab_to_ob(cats))

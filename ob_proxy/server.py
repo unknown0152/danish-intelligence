@@ -13,7 +13,7 @@ from .newznab import build_caps, build_results
 from .nzbparse import parse_nzb
 from .obclient import OBClient, OBError
 from .sizecache import SizeCache, Warmer
-from .translate import build_ob_params, normalize_title
+from .translate import build_ob_params, normalize_title, requested_ob_categories
 
 log = logging.getLogger("ob_proxy.server")
 
@@ -44,6 +44,13 @@ def _require_apikey(request: web.Request) -> web.Response | None:
     if request.query.get("apikey") != cfg.proxy_api_key:
         return web.Response(status=401, text="unauthorized")
     return None
+
+
+def _int_or_none(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -79,6 +86,12 @@ async def _handle_search(request: web.Request) -> web.Response:
     except OBError as exc:
         log.warning("OB search failed: %s", exc)
         return web.Response(status=502, text="upstream error")
+
+    requested_categories = requested_ob_categories(request.query, cfg.cat_map)
+    if requested_categories:
+        releases = [
+            r for r in releases if _int_or_none(r.get("category_id")) in requested_categories
+        ]
 
     # Resolve sizes: real (cached) or provisional, enqueueing misses for warming.
     sizes: dict[str, int] = {}

@@ -55,9 +55,12 @@ SONARR_API_KEY = _clean_env("SONARR_API_KEY") or _clean_env("SONARR_APIKEY") or 
 
 
 def _normalize_altmount_path(value: str) -> str:
-    doubled = f"{ALTMOUNT_VISIBLE_ROOT}{ALTMOUNT_VISIBLE_ROOT}/"
-    if value.startswith(doubled):
-        return f"{ALTMOUNT_VISIBLE_ROOT}/{value[len(doubled):]}"
+    if not value.startswith(f"{ALTMOUNT_VISIBLE_ROOT}/"):
+        return value
+    duplicate = f"/{ALTMOUNT_VISIBLE_ROOT.lstrip('/')}/"
+    duplicate_at = value.find(duplicate, len(ALTMOUNT_VISIBLE_ROOT))
+    if duplicate_at != -1:
+        return value[duplicate_at:]
     return value
 
 
