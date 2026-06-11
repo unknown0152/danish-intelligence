@@ -33,7 +33,7 @@ MANAGED_CF_NAMES = {
     "DTS",
     "AAC",
 }
-MANAGED_PROFILE_NAMES = {"NORDIC", "DanishAudio", "EnglishSubs"}
+MANAGED_PROFILE_NAMES = {"NORDIC", "Danish Audio", "Danish Subtitles"}
 DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
 PROXY_URL = os.getenv("PROXY_URL", "http://danish-intelligence:9699").rstrip("/")
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
@@ -337,8 +337,8 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
 
     profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
     if profiles:
-        _upsert_profile(session, app, profiles, "DanishAudio", {"DKAudio": 10000, "DKSubs": 0, **{k: v for k, v in scores.items() if k not in {"DKAudio", "DKSubs"}}}, cf_ids, valid_cf_ids)
-        _upsert_profile(session, app, profiles, "EnglishSubs", scores, cf_ids, valid_cf_ids)
+        _upsert_profile(session, app, profiles, "Danish Audio", {"DKAudio": 10000, "DKSubs": 0, **{k: v for k, v in scores.items() if k not in {"DKAudio", "DKSubs"}}}, cf_ids, valid_cf_ids)
+        _upsert_profile(session, app, profiles, "Danish Subtitles", scores, cf_ids, valid_cf_ids)
 
     return len(cf_ids), 2 if profiles else 0
 
@@ -402,12 +402,12 @@ def _paint_naming(session: requests.Session, app: ArrApp) -> None:
     
     if app.name == "Radarr":
         naming["renameMovies"] = True
-        naming["movieFolderFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}}"
-        naming["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}]"
+        naming["movieFolderFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Custom Formats}]"
+        naming["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
     elif app.name == "Sonarr":
         naming["renameEpisodes"] = True
-        naming["seriesFolderFormat"] = "{Series TitleYear} {imdb-{ImdbId}} {tvdb-{TvdbId}}"
-        naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{Quality Full}]"
+        naming["seriesFolderFormat"] = "{Series TitleYear} {imdb-{ImdbId}} {tvdb-{TvdbId}} [{Custom Formats}]"
+        naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
         
     _put_json(session, f"{api}/config/naming?forceSave=true", app.api_key, naming)
 
