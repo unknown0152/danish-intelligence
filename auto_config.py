@@ -296,7 +296,7 @@ def _managed_cf_payloads() -> list[dict[str, Any]]:
             "name": "EAC3 Atmos",
             "includeCustomFormatWhenRenaming": False,
             "specifications": [
-                {"name": "EAC3", "implementation": "ReleaseTitleSpecification", "negate": False, "required": True, "fields": [{"name": "value", "value": r"EAC3|DD\+|E-AC-3"}]},
+                {"name": "EAC3", "implementation": "ReleaseTitleSpecification", "negate": False, "required": True, "fields": [{"name": "value", "value": r"EAC3|DD\+|DDP|DD\.?P|E-AC-3"}]},
                 {"name": "Atmos", "implementation": "ReleaseTitleSpecification", "negate": False, "required": True, "fields": [{"name": "value", "value": r"\bAtmos\b"}]},
             ],
         },
@@ -305,7 +305,7 @@ def _managed_cf_payloads() -> list[dict[str, Any]]:
             "name": "EAC3",
             "includeCustomFormatWhenRenaming": False,
             "specifications": [
-                {"name": "EAC3", "implementation": "ReleaseTitleSpecification", "negate": False, "required": True, "fields": [{"name": "value", "value": r"EAC3|DD\+|E-AC-3"}]},
+                {"name": "EAC3", "implementation": "ReleaseTitleSpecification", "negate": False, "required": True, "fields": [{"name": "value", "value": r"EAC3|DD\+|DDP|DD\.?P|E-AC-3"}]},
                 {"name": "NOT Atmos", "implementation": "ReleaseTitleSpecification", "negate": True, "required": True, "fields": [{"name": "value", "value": r"\bAtmos\b"}]},
             ],
         },
@@ -323,7 +323,7 @@ def _managed_cf_payloads() -> list[dict[str, Any]]:
         _cf_payload("HDR10+", r"HDR10\+"),
         _cf_payload("HDR10", r"HDR10(?!\+)"),
         _cf_payload("HDR", r"\bHDR\b"),
-        _cf_payload("HEVC", r"x265|HEVC"),
+        _cf_payload("HEVC", r"x265|HEVC|H[ ._-]?265"),
     ]
 
 
