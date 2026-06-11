@@ -34,7 +34,9 @@ def _enclosure_base(request: web.Request, cfg: Config) -> str:
     # Derive from how the caller reached us (honours reverse proxies via Host).
     scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
     host = request.headers.get("X-Forwarded-Host", request.host)
-    return f"{scheme}://{host}"
+    path = request.path
+    route_prefix = path.rsplit("/api", 1)[0] if path.endswith("/api") else ""
+    return f"{scheme}://{host}{route_prefix}"
 
 
 def _require_apikey(request: web.Request) -> web.Response | None:
