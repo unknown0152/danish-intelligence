@@ -169,6 +169,9 @@ For AltMount integration:
   read/import time, but Radarr/Sonarr may remain stuck at
   `Downloaded - Waiting to Import` instead of getting a clean retry/cleanup
   path.
+- Playback-safe defaults keep failure masking enabled, cap background imports
+  while streams are active, and size the segment cache for high-bitrate Plex
+  playback.
 - Danish Intelligence defaults `ALTMOUNT_URL` to
   `http://altmount:8080/sabnzbd`.
 - Radarr/Sonarr download clients should point to Danish Intelligence:
