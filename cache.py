@@ -181,7 +181,7 @@ async def cache_get(nzb_id: str, release_name: str = "") -> tuple[str | None, li
                 "result_tag IN (?, ?) OR "
                 "(result_tag IN (?, ?) AND source IN ('nfo','attr','description','ffprobe'))"
                 ") ORDER BY (result_tag IN (?, ?)) DESC LIMIT 1",
-                (release_name, *_AUDIO_TAG_ALIASES, *_SUBS_TAG_ALIASES, *_AUDIO_TAG_ALIASES),
+                (release_name, *AUDIO_TAG_ALIASES, *SUBS_TAG_ALIASES, *AUDIO_TAG_ALIASES),
             ) as cur:
                 row = await cur.fetchone()
                 if row:
@@ -357,7 +357,7 @@ async def backfill_scene_groups_from_cache() -> int:
         async with _db.execute(
             "SELECT release_name, result_tag FROM nfo_cache "
             "WHERE result_tag IN (?, ?, ?, ?) AND release_name IS NOT NULL",
-            (*_AUDIO_TAG_ALIASES, *_SUBS_TAG_ALIASES),
+            (*AUDIO_TAG_ALIASES, *SUBS_TAG_ALIASES),
         ) as cur:
             rows = await cur.fetchall()
 
