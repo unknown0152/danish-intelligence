@@ -1,6 +1,7 @@
 """App: HTTP handler, lifecycle hooks, main entry point."""
 
 import asyncio
+import json
 import os
 import re
 import secrets
@@ -21,6 +22,28 @@ from .nfo_fetch import _search_rate_limit_ok, load_indexer_configs
 
 # ── Handler ───────────────────────────────────────────────────────────────────
 
+ALTMOUNT_VISIBLE_ROOT = os.getenv("ALTMOUNT_VISIBLE_ROOT", "/mnt/altmount").rstrip("/")
+
+
+def _normalize_altmount_path(value: str) -> str:
+    doubled = f"{ALTMOUNT_VISIBLE_ROOT}{ALTMOUNT_VISIBLE_ROOT}/"
+    if value.startswith(doubled):
+        return f"{ALTMOUNT_VISIBLE_ROOT}/{value[len(doubled):]}"
+    return value
+
+
+def _normalize_altmount_response(obj):
+    if isinstance(obj, dict):
+        return {
+            key: _normalize_altmount_path(value) if key in {"path", "storage", "filename"} and isinstance(value, str)
+            else _normalize_altmount_response(value)
+            for key, value in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_normalize_altmount_response(item) for item in obj]
+    return obj
+
+
 async def handle_altmount(request: web.Request) -> web.Response:
     """Shim for AltMount/SABnzbd: translates mode=qstatus -> mode=status."""
     params = dict(request.rel_url.query)
@@ -37,6 +60,12 @@ async def handle_altmount(request: web.Request) -> web.Response:
         async with session.request(request.method, alt_url, data=data,
                                     headers=headers, timeout=10) as resp:
             body = await resp.read()
+            if params.get("output") == "json" and params.get("mode") in {"history", "queue"}:
+                try:
+                    payload = _normalize_altmount_response(json.loads(body.decode("utf-8")))
+                    body = json.dumps(payload).encode("utf-8")
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    pass
             return web.Response(body=body, status=resp.status,
                                 headers={"Content-Type": "application/json"})
     except Exception as e:
