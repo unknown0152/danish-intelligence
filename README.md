@@ -164,6 +164,11 @@ For AltMount integration:
 
 - AltMount should be reachable as `http://altmount:8080`.
 - Its SAB-compatible API should be enabled at `/sabnzbd`.
+- Health monitoring, repair-on-import, segment cache, and ARR queue cleanup
+  should stay enabled. Without these, AltMount can detect a corrupt NZB at
+  read/import time, but Radarr/Sonarr may remain stuck at
+  `Downloaded - Waiting to Import` instead of getting a clean retry/cleanup
+  path.
 - Danish Intelligence defaults `ALTMOUNT_URL` to
   `http://altmount:8080/sabnzbd`.
 - Radarr/Sonarr download clients should point to Danish Intelligence:

@@ -1,5 +1,5 @@
 {
-  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=6",
+  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=7",
   "showcase": [],
   "all": [
     {
@@ -43,7 +43,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json?v=8"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json?v=9"
     },
     {
       "id": "danish-master-stack",
@@ -67,7 +67,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=2"
     }
   ]
 }

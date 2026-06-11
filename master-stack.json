@@ -97,7 +97,17 @@
                 "TZ=Europe/Copenhagen",
                 "PORT=8080",
                 "LOG_LEVEL=warn",
-                "JWT_SECRET={Passwords.64}"
+                "JWT_SECRET={Passwords.64}",
+                "ALTMOUNT_ENABLE_HEALTH=true",
+                "ALTMOUNT_HEALTH_RESOLVE_REPAIR_ON_IMPORT=true",
+                "ALTMOUNT_HEALTH_MAX_RETRIES=2",
+                "ALTMOUNT_HEALTH_MAX_REPAIR_RETRIES=3",
+                "ALTMOUNT_SEGMENT_CACHE_ENABLED=true",
+                "ALTMOUNT_SEGMENT_CACHE_PATH=/config/segment-cache",
+                "ALTMOUNT_SEGMENT_CACHE_MAX_SIZE_GB=50",
+                "ALTMOUNT_SEGMENT_CACHE_EXPIRY_HOURS=168",
+                "ALTMOUNT_ARRS_QUEUE_CLEANUP_ENABLED=true",
+                "ALTMOUNT_ARRS_QUEUE_CLEANUP_INTERVAL_SECONDS=300"
             ],
             "volumes": [
                 {
