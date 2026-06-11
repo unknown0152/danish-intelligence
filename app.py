@@ -44,6 +44,14 @@ def _normalize_altmount_response(obj):
     return obj
 
 
+def _redacted_query(query) -> str:
+    secret_names = {"apikey", "api_key", "x-api-key", "token", "key", "password"}
+    return urlencode([
+        (name, "***" if name.lower() in secret_names else value)
+        for name, value in query.items()
+    ], doseq=True)
+
+
 async def handle_altmount(request: web.Request) -> web.Response:
     """Shim for AltMount/SABnzbd: translates mode=qstatus -> mode=status."""
     params = dict(request.rel_url.query)
@@ -77,7 +85,7 @@ async def handle(request: web.Request) -> web.Response:
     _metrics["requests_total"] += 1
     _req_id.set(secrets.token_hex(4))
     path = request.path.lstrip("/")
-    log(f"REQ-START: /{path} {request.rel_url.query}", "INFO")
+    log(f"REQ-START: /{path} {_redacted_query(request.rel_url.query)}", "INFO")
 
     if path.startswith("altmount"):
         return await handle_altmount(request)
