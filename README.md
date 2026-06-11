@@ -172,6 +172,10 @@ For AltMount integration:
 - Playback-safe defaults keep failure masking enabled, cap background imports
   while streams are active, and size the segment cache for high-bitrate Plex
   playback.
+- Import Processing is kept Radarr/Sonarr focused: video extensions only,
+  sample filtering enabled, release-name renaming enabled, failed items cleaned
+  after 24 hours, import history retained for 30 days, and completed NZBs kept
+  for repair/debug workflows.
 - Danish Intelligence defaults `ALTMOUNT_URL` to
   `http://altmount:8080/sabnzbd`.
 - Radarr/Sonarr download clients should point to Danish Intelligence:
