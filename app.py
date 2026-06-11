@@ -5,6 +5,8 @@ import json
 import os
 import re
 import secrets
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import aiohttp
 from aiohttp import web
@@ -23,6 +25,33 @@ from .nfo_fetch import _search_rate_limit_ok, load_indexer_configs
 # ── Handler ───────────────────────────────────────────────────────────────────
 
 ALTMOUNT_VISIBLE_ROOT = os.getenv("ALTMOUNT_VISIBLE_ROOT", "/mnt/altmount").rstrip("/")
+ALTMOUNT_URL = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
+ALTMOUNT_API_KEY = os.getenv("ALTMOUNT_API_KEY") or os.getenv("ALTMOUNT_APIKEY") or ""
+RADARR_URL = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
+SONARR_URL = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
+
+
+def _clean_env(name: str) -> str:
+    value = os.getenv(name, "")
+    return "" if value.startswith("{") and value.endswith("}") else value
+
+
+def _read_config_key(app_name: str) -> str:
+    for path in (f"/arr-config/{app_name}/config.xml", f"/srv/config/{app_name}/config.xml"):
+        cfg = Path(path)
+        if not cfg.exists():
+            continue
+        try:
+            key = ET.parse(cfg).getroot().findtext("ApiKey", default="").strip()
+            if key:
+                return key
+        except Exception as exc:
+            log(f"altmount-shim: could not read {path}: {exc}", "WARN")
+    return ""
+
+
+RADARR_API_KEY = _clean_env("RADARR_API_KEY") or _clean_env("RADARR_APIKEY") or _read_config_key("radarr")
+SONARR_API_KEY = _clean_env("SONARR_API_KEY") or _clean_env("SONARR_APIKEY") or _read_config_key("sonarr")
 
 
 def _normalize_altmount_path(value: str) -> str:
@@ -57,9 +86,19 @@ async def handle_altmount(request: web.Request) -> web.Response:
     params = dict(request.rel_url.query)
     if params.get("mode") == "qstatus":
         params["mode"] = "status"
+    if ALTMOUNT_API_KEY:
+        params["apikey"] = ALTMOUNT_API_KEY
+    elif "ma_username" not in params and "ma_password" not in params:
+        params.pop("apikey", None)
+        if RADARR_API_KEY:
+            params["ma_username"] = RADARR_URL
+            params["ma_password"] = RADARR_API_KEY
+        elif SONARR_API_KEY:
+            params["ma_username"] = SONARR_URL
+            params["ma_password"] = SONARR_API_KEY
 
     # Forward to AltMount container
-    alt_url = f"http://altmount:8080/sabnzbd?{urlencode(params)}"
+    alt_url = f"{ALTMOUNT_URL}?{urlencode(params)}"
     session = request.app['session']
     try:
         # Forward everything (method, body, headers)
