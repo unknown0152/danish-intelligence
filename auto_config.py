@@ -447,11 +447,11 @@ def _paint_naming(session: requests.Session, app: ArrApp) -> None:
     
     if app.name == "Radarr":
         naming["renameMovies"] = True
-        naming["movieFolderFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Custom Formats}]"
+        naming["movieFolderFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}}"
         naming["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
     elif app.name == "Sonarr":
         naming["renameEpisodes"] = True
-        naming["seriesFolderFormat"] = "{Series TitleYear} {imdb-{ImdbId}} {tvdb-{TvdbId}} [{Custom Formats}]"
+        naming["seriesFolderFormat"] = "{Series TitleYear} {imdb-{ImdbId}} {tvdb-{TvdbId}}"
         naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
 	        
     _put_json(session, f"{api}/config/naming?forceSave=true", app.api_key, naming)
