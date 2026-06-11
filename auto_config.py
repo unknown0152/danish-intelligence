@@ -396,22 +396,92 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
     return linked
 
 
-def _rewire_download_clients(session: requests.Session, app: ArrApp) -> int:
+def _paint_naming(session: requests.Session, app: ArrApp) -> None:
+    api = f"{app.url}/api/v3"
+    naming = _get_json(session, f"{api}/config/naming", app.api_key)
+    
+    if app.name == "Radarr":
+        naming["renameMovies"] = True
+        naming["movieFolderFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}}"
+        naming["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}]"
+    elif app.name == "Sonarr":
+        naming["renameEpisodes"] = True
+        naming["seriesFolderFormat"] = "{Series TitleYear} {imdb-{ImdbId}} {tvdb-{TvdbId}}"
+        naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{Quality Full}]"
+        
+    _put_json(session, f"{api}/config/naming?forceSave=true", app.api_key, naming)
+
+def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
+    api = f"{app.url}/api/v3"
+    existing = _get_json(session, f"{api}/rootfolder", app.api_key)
+    existing_paths = {f.get("path", "").rstrip("/") for f in existing}
+    
+    radarr_paths = [
+        "/media/movies", "/media/kids-movies", "/media/Animation", "/media/Børn Film",
+        "/media/Comedy", "/media/Danske Film", "/media/Dokumentar", "/media/Gamle Danske Film",
+        "/media/Horror", "/media/Julefilm", "/media/Old-Classic", "/media/UFC", "/media/WWE Show"
+    ]
+    
+    sonarr_paths = [
+        "/media/tv", "/media/kids-tv", "/media/Animation Serie", "/media/Børn Serier",
+        "/media/Dansk Tv", "/media/Dansk Tv-Serier", "/media/Dokumentar Serie",
+        "/media/Julekalender", "/media/Serier", "/media/WWE-Series"
+    ]
+    
+    target_paths = radarr_paths if app.name == "Radarr" else sonarr_paths
+    added = 0
+    
+    for path in target_paths:
+        if path not in existing_paths:
+            try:
+                _post_json(session, f"{api}/rootfolder", app.api_key, {"path": path})
+                added += 1
+            except requests.RequestException as e:
+                print(f"[Core] Auto-Config: Failed to add root folder {path}: {e}", flush=True)
+            
+    return added
+
+def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
     api = f"{app.url}/api/v3"
     clients = _get_json(session, f"{api}/downloadclient", app.api_key)
-    linked = 0
+    proxy_api_key = os.getenv("PROXY_API_KEY", "")
+    
     for client in clients:
-        if not _is_altmount_proxy_client(client):
-            continue
+        if _is_altmount_proxy_client(client):
+            _set_field(client, "host", PROXY_HOST)
+            _set_field(client, "port", PROXY_PORT)
+            _set_field(client, "useSsl", PROXY_USE_SSL)
+            _set_field(client, "urlBase", "/altmount")
+            if proxy_api_key:
+                _set_field(client, "apiKey", proxy_api_key)
+            _put_json(session, f"{api}/downloadclient/{client['id']}?forceSave=true", app.api_key, client)
+            return 1
 
-        _set_field(client, "host", PROXY_HOST)
-        _set_field(client, "port", PROXY_PORT)
-        _set_field(client, "useSsl", PROXY_USE_SSL)
-        _set_field(client, "urlBase", "/altmount")
-        _put_json(session, f"{api}/downloadclient/{client['id']}?forceSave=true", app.api_key, client)
-        linked += 1
-    return linked
+    if not proxy_api_key:
+        print("[Core] Auto-Config: Cannot create AltMount client; PROXY_API_KEY is missing.", flush=True)
+        return 0
 
+    category = "movies" if app.name == "Radarr" else "tv"
+    new_client = {
+        "enable": True,
+        "name": "AltMount",
+        "implementation": "Sabnzbd",
+        "configContract": "SabnzbdSettings",
+        "fields": [
+            {"name": "host", "value": PROXY_HOST},
+            {"name": "port", "value": PROXY_PORT},
+            {"name": "useSsl", "value": PROXY_USE_SSL},
+            {"name": "urlBase", "value": "/altmount"},
+            {"name": "apiKey", "value": proxy_api_key},
+            {"name": "username", "value": ""},
+            {"name": "password", "value": ""},
+            {"name": "movieCategory" if app.name == "Radarr" else "tvCategory", "value": category},
+            {"name": "recentMoviePriority" if app.name == "Radarr" else "recentTvPriority", "value": 0},
+            {"name": "olderMoviePriority" if app.name == "Radarr" else "olderTvPriority", "value": 0}
+        ]
+    }
+    _post_json(session, f"{api}/downloadclient?forceSave=true", app.api_key, new_client)
+    return 1
 
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
@@ -443,12 +513,15 @@ def paint() -> dict[str, int]:
     if not apps:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0}
     for app in apps:
+        _paint_naming(session, app)
+        root_folders = _ensure_root_folders(session, app)
         cf_count, profile_count = _paint_formats_and_profiles(session, app)
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
-        download_clients = _rewire_download_clients(session, app)
+        download_clients = _ensure_download_client(session, app)
         totals["apps"] += 1
+        totals["root_folders"] += root_folders
         totals["custom_formats"] += cf_count
         totals["profiles"] += profile_count
         totals["linked_indexers"] += linked
@@ -456,7 +529,7 @@ def paint() -> dict[str, int]:
         print(
             f"[Core] Auto-Config: {app.name} painted {cf_count} CFs, "
             f"{profile_count} profiles, linked {linked} indexers, "
-            f"{download_clients} download clients",
+            f"{download_clients} download clients, created {root_folders} root folders",
             flush=True,
         )
 
