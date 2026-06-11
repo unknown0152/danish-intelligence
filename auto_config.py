@@ -453,8 +453,45 @@ def _paint_naming(session: requests.Session, app: ArrApp) -> None:
         naming["renameEpisodes"] = True
         naming["seriesFolderFormat"] = "{Series TitleYear} {imdb-{ImdbId}} {tvdb-{TvdbId}} [{Custom Formats}]"
         naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
-        
+	        
     _put_json(session, f"{api}/config/naming?forceSave=true", app.api_key, naming)
+
+
+def _paint_indexer_config(session: requests.Session, app: ArrApp) -> None:
+    """Whitelist proxy markers that Radarr can otherwise misread as hardcoded subs."""
+    api = f"{app.url}/api/v3"
+    try:
+        config = _get_json(session, f"{api}/config/indexer", app.api_key)
+    except requests.RequestException as exc:
+        print(f"[Core] Auto-Config: {app.name} indexer config skipped: {exc}", flush=True)
+        return
+
+    if "whitelistedHardcodedSubs" not in config:
+        return
+
+    existing = [
+        tag.strip()
+        for tag in str(config.get("whitelistedHardcodedSubs") or "").split(",")
+        if tag.strip()
+    ]
+    wanted = [
+        DK_SUBS_TITLE.lstrip("."),
+        LEGACY_DK_SUBS_TITLE.lstrip("."),
+        CF_DANISH_SUBTITLES,
+    ]
+    merged: list[str] = []
+    seen: set[str] = set()
+    for tag in [*existing, *wanted]:
+        key = tag.casefold()
+        if key not in seen:
+            merged.append(tag)
+            seen.add(key)
+
+    new_value = ",".join(merged)
+    if new_value != config.get("whitelistedHardcodedSubs"):
+        config["whitelistedHardcodedSubs"] = new_value
+        _put_json(session, f"{api}/config/indexer", app.api_key, config)
+
 
 def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
     api = f"{app.url}/api/v3"
@@ -552,6 +589,7 @@ def paint() -> dict[str, int]:
     totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0}
     for app in apps:
         _paint_naming(session, app)
+        _paint_indexer_config(session, app)
         root_folders = _ensure_root_folders(session, app)
         cf_count, profile_count = _paint_formats_and_profiles(session, app)
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
