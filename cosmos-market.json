@@ -44,6 +44,30 @@
         "amd64"
       ],
       "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json?v=8"
+    },
+    {
+      "id": "danish-master-stack",
+      "name": "Danish Media Stack (Full Install)",
+      "description": "The Ultimate 1-Click Danish Media Stack",
+      "longDescription": "<p><b>The Total Automation Blueprint</b></p><p>This installs everything in one click: <b>Radarr, Sonarr, Prowlarr, AltMount, and Danish Intelligence.</b></p><p>Once installed, the Intelligence core will automatically discover the Arrs, build the Kometa-ready folder structures (<code>/media/movies</code>, <code>/media/tv</code>), set up the AltMount download clients, and paint all Danish Custom Formats and Quality Profiles. Zero manual configuration required.</p>",
+      "url": "https://github.com/unknown0152/danish-intelligence",
+      "tags": [
+        "radarr",
+        "sonarr",
+        "prowlarr",
+        "danish",
+        "intelligence",
+        "stack",
+        "bundle"
+      ],
+      "repository": "https://github.com/unknown0152/danish-intelligence",
+      "image": "ghcr.io/unknown0152/danish-intelligence",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png",
+      "screenshots": [],
+      "supported_architectures": [
+        "amd64"
+      ],
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json"
     }
   ]
 }

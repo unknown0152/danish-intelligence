@@ -1,0 +1,200 @@
+{
+    "minVersion": "0.9.0",
+    "cosmos-installer": {
+        "form": [
+            {
+                "name": "ProwlarrKey",
+                "label": "Prowlarr API Key",
+                "initialValue": "{Passwords.32}",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "OldBoysToken",
+                "label": "OldBoys API Token",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "OldBoysRSS",
+                "label": "OldBoys RSS Key (RID)",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "MediaRoot",
+                "label": "Host Media Root Path",
+                "initialValue": "/srv/media",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "ConfigRoot",
+                "label": "Host Config Root Path",
+                "initialValue": "/srv/config",
+                "type": "text",
+                "required": true
+            }
+        ]
+    },
+    "services": {
+        "danish-intelligence": {
+            "image": "ghcr.io/unknown0152/danish-intelligence:latest",
+            "container_name": "danish-intelligence",
+            "restart": "unless-stopped",
+            "environment": [
+                "PROWLARR_URL=http://prowlarr:9696",
+                "PROWLARR_API_KEY={Context.ProwlarrKey}",
+                "OB_API_TOKEN={Context.OldBoysToken}",
+                "OB_RID={Context.OldBoysRSS}",
+                "PROXY_API_KEY={Passwords.32}",
+                "CACHE_DB=/config/proxy_cache.db",
+                "OB_PROXY_DB=/config/ob_meta.db",
+                "LISTEN_PORT=9699",
+                "LISTEN_HOST=0.0.0.0"
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "false",
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png"
+            },
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/danish-intelligence",
+                    "target": "/config",
+                    "type": "bind"
+                }
+            ],
+            "networks": {
+                "media-stack": {}
+            }
+        },
+        "altmount": {
+            "image": "ghcr.io/unknown0152/altmount-patched:latest",
+            "container_name": "altmount",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID=1001",
+                "PGID=1001",
+                "TZ=Europe/Copenhagen",
+                "PORT=8080",
+                "LOG_LEVEL=warn",
+                "JWT_SECRET={Passwords.64}"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/altmount",
+                    "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                },
+                {
+                    "source": "/mnt",
+                    "target": "/mnt",
+                    "type": "bind",
+                    "bind": {
+                        "propagation": "rshared"
+                    }
+                }
+            ],
+            "devices": [
+                "/dev/fuse:/dev/fuse:rwm"
+            ],
+            "cap_add": [
+                "SYS_ADMIN"
+            ],
+            "security_opt": [
+                "apparmor:unconfined"
+            ],
+            "networks": {
+                "media-stack": {}
+            }
+        },
+        "prowlarr": {
+            "image": "lscr.io/linuxserver/prowlarr:latest",
+            "container_name": "prowlarr",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID=1001",
+                "PGID=1001",
+                "TZ=Europe/Copenhagen"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/prowlarr",
+                    "target": "/config",
+                    "type": "bind"
+                }
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        },
+        "radarr": {
+            "image": "lscr.io/linuxserver/radarr:latest",
+            "container_name": "radarr",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID=1001",
+                "PGID=1001",
+                "TZ=Europe/Copenhagen"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/radarr",
+                    "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                }
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        },
+        "sonarr": {
+            "image": "lscr.io/linuxserver/sonarr:latest",
+            "container_name": "sonarr",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID=1001",
+                "PGID=1001",
+                "TZ=Europe/Copenhagen"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/sonarr",
+                    "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                }
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        }
+    }
+}
