@@ -13,8 +13,9 @@ from pathlib import Path
 from aiohttp import web
 import aiohttp
 
-# 1. Import dksubs-proxy logic
-import main as main_proxy
+# 1. Import Danish Intelligence modular logic
+from app import handle, on_startup as proxy_startup, on_cleanup as proxy_cleanup, VERSION, _metrics
+from hunt import _handle_learn_imported
 
 # 2. Import ob-proxy core logic
 from ob_proxy.config import Config as OBConfig
@@ -126,9 +127,9 @@ async def on_startup(app):
     ensure_proxy_api_key()
     _APP_STATE["prowlarr_key_discovered"] = ensure_prowlarr_api_key()
     
-    # Init dksubs
-    await main_proxy.on_startup(app)
-    print("[Core] dksubs initialized", flush=True)
+    # Init modular proxy
+    await proxy_startup(app)
+    print("[Core] Danish Intelligence modular core initialized", flush=True)
     
     # Init OldBoys
     try:
@@ -175,7 +176,7 @@ async def on_cleanup(app):
     if 'cache' in app:
         app['cache'].close()
         
-    await main_proxy.on_cleanup(app)
+    await proxy_cleanup(app)
     print("[Core] Cleanup sequence complete.", flush=True)
 
 
@@ -293,11 +294,11 @@ async def main():
     app.router.add_get("/cosmos-compose.json", serve_compose)
     
     # dksubs metrics and learn
-    app.router.add_get("/metrics", lambda r: web.json_response(dict(main_proxy._metrics)))
-    app.router.add_post("/learn/imported", main_proxy._handle_learn_imported)
+    app.router.add_get("/metrics", lambda r: web.json_response(dict(_metrics)))
+    app.router.add_post("/learn/imported", _handle_learn_imported)
     
     # NFO Hunter catch-all
-    app.router.add_route('*', '/{tail:.*}', main_proxy.handle)
+    app.router.add_route('*', '/{tail:.*}', handle)
 
     runner = web.AppRunner(app)
     await runner.setup()

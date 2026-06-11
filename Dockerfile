@@ -10,12 +10,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
+# We copy all files into /app. service.py will run as the entrypoint.
 COPY . .
 
 # Environment defaults
 ENV PYTHONUNBUFFERED=1
 ENV CACHE_DB=/config/proxy_cache.db
 ENV OB_PROXY_DB=/config/ob_meta.db
+ENV PYTHONPATH=/app
 
 # Health check
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 \

@@ -73,8 +73,8 @@ Each startup paint pass manages these Custom Formats:
 
 It also creates or updates:
 
-- `DanishAudio`
-- `EnglishSubs`
+- `Danish Audio`
+- `Danish Subtitles`
 
 Prowlarr application sync is set to `addOnly` so Prowlarr does not overwrite the
 proxy URLs in Radarr/Sonarr.

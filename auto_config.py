@@ -20,9 +20,8 @@ import requests
 
 
 MANAGED_CF_NAMES = {
-    "DK",
-    "DKSubs",
-    "DKAudio",
+    "Danish Audio",
+    "Danish Subtitles",
     "NORDIC.ENG",
     "TrueHD Atmos",
     "DTS-X",
@@ -32,6 +31,11 @@ MANAGED_CF_NAMES = {
     "EAC3",
     "DTS",
     "AAC",
+    "DV",
+    "HDR",
+    "HDR10",
+    "HDR10+",
+    "HEVC",
 }
 MANAGED_PROFILE_NAMES = {"NORDIC", "Danish Audio", "Danish Subtitles"}
 DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
@@ -241,8 +245,8 @@ def _cf_payload(name: str, pattern: str, include_rename: bool = False, required:
 
 def _managed_cf_payloads() -> list[dict[str, Any]]:
     return [
-        _cf_payload("DKAudio", r"(?:\[DKAudio[-:.][^\]]+\]|\.DKaudio\b)", include_rename=True),
-        _cf_payload("DKSubs", r"(?:\[DK[-:.][^\]]+\]|\.DKOK\b)", include_rename=True),
+        _cf_payload("Danish Audio", r"(?:\[Danish Audio\]|\.DanishAudio\b|\.DKaudio\b)", include_rename=True),
+        _cf_payload("Danish Subtitles", r"(?:\[Danish Subtitles\]|\.DanishSubs\b|\.DKOK\b)", include_rename=True),
         {
             "id": 0,
             "name": "TrueHD Atmos",
@@ -291,13 +295,18 @@ def _managed_cf_payloads() -> list[dict[str, Any]]:
             ],
         },
         _cf_payload("AAC", r"\bAAC\b"),
+        _cf_payload("DV", r"\bDV\b|Dolby[-. ]?Vision"),
+        _cf_payload("HDR10+", r"HDR10\+"),
+        _cf_payload("HDR10", r"HDR10(?!\+)"),
+        _cf_payload("HDR", r"\bHDR\b"),
+        _cf_payload("HEVC", r"x265|HEVC"),
     ]
 
 
 def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple[int, int]:
     api = f"{app.url}/api/v3"
     old_formats = _get_json(session, f"{api}/customformat", app.api_key)
-    old_ids = [fmt["id"] for fmt in old_formats if fmt.get("name") in MANAGED_CF_NAMES]
+    old_ids = [fmt["id"] for fmt in old_formats if fmt.get("name") in MANAGED_CF_NAMES or fmt.get("name") in {"DKAudio", "DKSubs"}]
     for fmt_id in old_ids:
         _delete(session, f"{api}/customformat/{fmt_id}", app.api_key)
 
@@ -313,8 +322,8 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
 
     profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
     scores = {
-        "DKAudio": 10000,
-        "DKSubs": 10000,
+        "Danish Audio": 10000,
+        "Danish Subtitles": 10000,
         "TrueHD Atmos": 2000,
         "DTS-X": 1800,
         "TrueHD": 1600,
@@ -331,13 +340,14 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
             if item.get("format") in valid_cf_ids and item.get("format") not in old_ids
         }
         for name, score in scores.items():
-            existing_scores[cf_ids[name]] = score
+            if name in cf_ids:
+                existing_scores[cf_ids[name]] = score
         profile["formatItems"] = _complete_format_items(valid_cf_ids, existing_scores)
         _put_json(session, f"{api}/qualityprofile/{profile['id']}", app.api_key, profile)
 
     profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
     if profiles:
-        _upsert_profile(session, app, profiles, "Danish Audio", {"DKAudio": 10000, "DKSubs": 0, **{k: v for k, v in scores.items() if k not in {"DKAudio", "DKSubs"}}}, cf_ids, valid_cf_ids)
+        _upsert_profile(session, app, profiles, "Danish Audio", {"Danish Audio": 10000, "Danish Subtitles": 0, **{k: v for k, v in scores.items() if k not in {"Danish Audio", "Danish Subtitles"}}}, cf_ids, valid_cf_ids)
         _upsert_profile(session, app, profiles, "Danish Subtitles", scores, cf_ids, valid_cf_ids)
 
     return len(cf_ids), 2 if profiles else 0

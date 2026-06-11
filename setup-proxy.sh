@@ -569,7 +569,7 @@ update_arr() {
             curl -s -X DELETE -H "X-Api-Key: $key" "$api/qualityprofile/$pdel_id" >/dev/null
             ((pdel++)) || true
         done < <(echo "$all_profs" | jq -r \
-            '.[]|select(.name=="NORDIC" or .name=="DanishAudio" or .name=="EnglishSubs")|.id')
+            '.[]|select(.name=="NORDIC" or .name=="Danish Audio" or .name=="Danish Subtitles")|.id')
         [[ $pdel -gt 0 ]] && { echo "    + Removed $pdel managed profile(s)"; sleep 1; }
     fi
 
@@ -603,7 +603,7 @@ update_arr() {
         echo "    + Updated all profiles: DKAudio/DKSubs=10000 | TrueHD Atmos=2000 … AAC=100"
     fi
 
-    # ── Create DanishAudio profile ─────────────────────────────────────────────
+    # ── Create Danish Audio profile ─────────────────────────────────────────────
     # minFormatScore=10000: requires DKAudio tag (scores 10000) — audio-dubbed DK releases.
     # DKSubs is NOT scored here — a release with only Danish subs (no audio) would
     # otherwise pass minFormatScore and get grabbed despite being the wrong profile.
@@ -617,7 +617,7 @@ update_arr() {
             --arg ea "$eac3_atmos_id" --arg ec "$eac3_id" \
             --arg dt "$dts_id" --arg ac "$aac_id" '
             .[0] | del(.id) |
-            .name = "DanishAudio" |
+            .name = "Danish Audio" |
             .minFormatScore = 10000 |
             .cutoffFormatScore = 0 |
             .language = {"id": -1, "name": "Any"} |
@@ -634,10 +634,10 @@ update_arr() {
             (if ($ac != "" and $ac != "null") then .formatItems += [{"format":($ac|tonumber),"score":100}]   else . end)')
         curl -sf -X POST -H "X-Api-Key: $key" -H "Content-Type: application/json" \
             -d "$da_prof" "$api/qualityprofile" >/dev/null \
-            && echo "    + Created profile: DanishAudio (minFormatScore=10000, DKAudio=10000)"
+            && echo "    + Created profile: Danish Audio (minFormatScore=10000, DKAudio=10000)"
     fi
 
-    # ── Create EnglishSubs profile ─────────────────────────────────────────────
+    # ── Create Danish Subtitles profile ─────────────────────────────────────────────
     # minFormatScore=10000: requires DKSubs tag (scores 10000) — English content + DK subs.
     if [[ -n "$dksubs_id" && "$dksubs_id" != "null" ]]; then
         local es_prof
@@ -648,7 +648,7 @@ update_arr() {
             --arg ea "$eac3_atmos_id" --arg ec "$eac3_id" \
             --arg dt "$dts_id" --arg ac "$aac_id" '
             .[0] | del(.id) |
-            .name = "EnglishSubs" |
+            .name = "Danish Subtitles" |
             .minFormatScore = 10000 |
             .cutoffFormatScore = 0 |
             .language = {"id": -1, "name": "Any"} |
@@ -665,7 +665,7 @@ update_arr() {
             (if ($ac != "" and $ac != "null") then .formatItems += [{"format":($ac|tonumber),"score":100}]   else . end)')
         curl -sf -X POST -H "X-Api-Key: $key" -H "Content-Type: application/json" \
             -d "$es_prof" "$api/qualityprofile" >/dev/null \
-            && echo "    + Created profile: EnglishSubs (minFormatScore=10000, DKSubs=10000, DKAudio=10000)"
+            && echo "    + Created profile: Danish Subtitles (minFormatScore=10000, DKSubs=10000, DKAudio=10000)"
     fi
 
     # ── Profile hardening: disable junk qualities, cutoff=Remux-2160p, upgrades on
@@ -676,7 +676,7 @@ update_arr() {
     cutoff_id=$(echo "$qd" | jq -r '.[] | select(.quality.name=="Remux-2160p" or .quality.name=="Bluray-2160p Remux") | .quality.id' | head -1)
     if [[ -n "$cutoff_id" && "$cutoff_id" != "null" ]]; then
         local profs3; profs3=$(curl -sf -H "X-Api-Key: $key" "$api/qualityprofile")
-        echo "$profs3" | jq -c '.[] | select(.name=="DanishAudio" or .name=="EnglishSubs")' | while read -r prof; do
+        echo "$profs3" | jq -c '.[] | select(.name=="Danish Audio" or .name=="Danish Subtitles")' | while read -r prof; do
             local pid; pid=$(echo "$prof" | jq -r '.id')
             local pname; pname=$(echo "$prof" | jq -r '.name')
             local hardened
@@ -1028,5 +1028,5 @@ echo "  Metrics:      curl http://localhost:9699/metrics"
 echo "  Proxy logs:   docker logs -f dksubs-proxy"
 echo "  CFs created:  DKAudio, DKSubs, TrueHD Atmos, DTS-X, TrueHD,"
 echo "                DTS-HD MA, EAC3 Atmos, EAC3, DTS, AAC"
-echo "  Profiles:     DanishAudio (minScore=10000), EnglishSubs (minScore=10000)"
+echo "  Profiles:     Danish Audio (minScore=10000), Danish Subtitles (minScore=10000)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

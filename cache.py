@@ -75,6 +75,7 @@ async def cache_init() -> None:
     try:
         _db = await aiosqlite.connect(CACHE_DB)
         await _db.execute("CREATE TABLE IF NOT EXISTS nfo_cache (nzb_id TEXT PRIMARY KEY, result_tag TEXT NOT NULL, release_name TEXT, scanned_at REAL NOT NULL, media_tags TEXT)")
+        await _db.execute("CREATE INDEX IF NOT EXISTS idx_nfo_cache_release_name ON nfo_cache (release_name)")
         await _ensure_nfo_cache_media_tags_column(_db)
         await _ensure_nfo_cache_source_column(_db)
         await _ensure_classifier_audit_table(_db)
