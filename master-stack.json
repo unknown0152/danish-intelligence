@@ -114,19 +114,25 @@
                 "media-stack": {}
             }
         },
-        "prowlarr": {
-            "image": "lscr.io/linuxserver/prowlarr:latest",
-            "container_name": "prowlarr",
+        "plex": {
+            "image": "lscr.io/linuxserver/plex:latest",
+            "container_name": "plex",
             "restart": "unless-stopped",
             "environment": [
                 "PUID=1001",
                 "PGID=1001",
-                "TZ=Europe/Copenhagen"
+                "TZ=Europe/Copenhagen",
+                "VERSION=docker"
             ],
             "volumes": [
                 {
-                    "source": "{Context.ConfigRoot}/prowlarr",
+                    "source": "{Context.ConfigRoot}/plex",
                     "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
                     "type": "bind"
                 }
             ],
