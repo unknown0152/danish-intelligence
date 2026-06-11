@@ -416,17 +416,8 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
     existing = _get_json(session, f"{api}/rootfolder", app.api_key)
     existing_paths = {f.get("path", "").rstrip("/") for f in existing}
     
-    radarr_paths = [
-        "/media/movies", "/media/kids-movies", "/media/Animation", "/media/Børn Film",
-        "/media/Comedy", "/media/Danske Film", "/media/Dokumentar", "/media/Gamle Danske Film",
-        "/media/Horror", "/media/Julefilm", "/media/Old-Classic", "/media/UFC", "/media/WWE Show"
-    ]
-    
-    sonarr_paths = [
-        "/media/tv", "/media/kids-tv", "/media/Animation Serie", "/media/Børn Serier",
-        "/media/Dansk Tv", "/media/Dansk Tv-Serier", "/media/Dokumentar Serie",
-        "/media/Julekalender", "/media/Serier", "/media/WWE-Series"
-    ]
+    radarr_paths = ["/media/movies", "/media/kids-movies"]
+    sonarr_paths = ["/media/tv", "/media/kids-tv"]
     
     target_paths = radarr_paths if app.name == "Radarr" else sonarr_paths
     added = 0
