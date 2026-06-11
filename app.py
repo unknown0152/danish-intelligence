@@ -74,7 +74,7 @@ def _normalize_altmount_response(obj):
 
 
 def _redacted_query(query) -> str:
-    secret_names = {"apikey", "api_key", "x-api-key", "token", "key", "password"}
+    secret_names = {"apikey", "api_key", "x-api-key", "token", "key", "password", "ma_password"}
     return urlencode([
         (name, "***" if name.lower() in secret_names else value)
         for name, value in query.items()
