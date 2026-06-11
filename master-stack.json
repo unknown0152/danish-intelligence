@@ -63,6 +63,24 @@
                     "source": "{Context.ConfigRoot}/danish-intelligence",
                     "target": "/config",
                     "type": "bind"
+                },
+                {
+                    "source": "{Context.ConfigRoot}/prowlarr",
+                    "target": "/arr-config/prowlarr",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
+                    "source": "{Context.ConfigRoot}/radarr",
+                    "target": "/arr-config/radarr",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
+                    "source": "{Context.ConfigRoot}/sonarr",
+                    "target": "/arr-config/sonarr",
+                    "type": "bind",
+                    "read_only": true
                 }
             ],
             "networks": {
