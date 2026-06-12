@@ -82,7 +82,10 @@ It also creates or updates:
 - `Danish Subtitles` profile: `minFormatScore=10000`, `cutoffFormatScore=0`, Danish Subtitles `10000`, Danish Audio `0`.
 
 The proxy emits `.DanishAudio` and `.DanishSubs` markers. Legacy `.DKaudio` and
-`.DKOK` markers are accepted only as compatibility aliases.
+`.DKOK` markers are accepted only as compatibility aliases. `NorTekst` is also
+accepted by the Danish Subtitles CF so AltMount imports keep their subtitle score
+when the NZB/folder name contains `.DanishSubs` but the inner MKV filename has
+only the shorter Nordic text marker.
 
 ## Code Map
 

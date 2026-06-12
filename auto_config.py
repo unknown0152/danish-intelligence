@@ -270,7 +270,7 @@ def _cf_payload(name: str, pattern: str, include_rename: bool = False, required:
 def _managed_cf_payloads() -> list[dict[str, Any]]:
     return [
         _cf_payload(CF_DANISH_AUDIO, rf"(?:\[Danish Audio\]|{re.escape(DK_AUDIO_TITLE)}\b|{re.escape(LEGACY_DK_AUDIO_TITLE)}\b)", include_rename=True),
-        _cf_payload(CF_DANISH_SUBTITLES, rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b)", include_rename=True),
+        _cf_payload(CF_DANISH_SUBTITLES, rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b|[._-]NorTekst\b)", include_rename=True),
         {
             "id": 0,
             "name": "TrueHD Atmos",
