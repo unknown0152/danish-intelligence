@@ -50,6 +50,7 @@
                 "PROXY_API_KEY={Passwords.32}",
                 "CACHE_DB=/config/proxy_cache.db",
                 "OB_PROXY_DB=/config/ob_meta.db",
+                "SEERR_URL=http://seerr:5055",
                 "LISTEN_PORT=9699",
                 "LISTEN_HOST=0.0.0.0"
             ],
@@ -194,6 +195,42 @@
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        },
+        "seerr": {
+            "image": "ghcr.io/seerr-team/seerr:latest",
+            "container_name": "seerr",
+            "init": true,
+            "restart": "unless-stopped",
+            "environment": [
+                "PORT=5055",
+                "LOG_LEVEL=info",
+                "TZ=Europe/Copenhagen"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/seerr",
+                    "target": "/app/config",
+                    "type": "bind"
+                }
+            ],
+            "healthcheck": {
+                "test": [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/settings/public || exit 1"
+                ],
+                "start_period": "20s",
+                "timeout": "3s",
+                "interval": "15s",
+                "retries": 3
+            },
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true",
+                "cosmos-icon": "https://raw.githubusercontent.com/seerr-team/seerr/develop/public/android-chrome-512x512.png"
             },
             "networks": {
                 "media-stack": {}

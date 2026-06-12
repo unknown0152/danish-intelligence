@@ -1,6 +1,6 @@
 # Danish Intelligence
 
-Unified Danish media-stack core for Cosmos, Prowlarr, Radarr, and Sonarr.
+Unified Danish media-stack core for Cosmos, Prowlarr, Radarr, Sonarr, and Seerr.
 
 Danish Intelligence combines Danish release proxying, OldBoys translation, and DanskArr
 autopilot behavior into one container. It is designed for Cosmos Cloud Market
@@ -17,6 +17,8 @@ automatically configures the local Arr stack.
 - Paints Danish Custom Formats and Quality Profiles into Radarr and Sonarr.
 - Rewires Radarr/Sonarr indexers and AltMount download clients to use
   `http://danish-intelligence:9699`.
+- Deploys Seerr in the full stack for request management without storing private
+  Jellyfin, Radarr, Sonarr, or Seerr API keys in the market manifest.
 - Keeps the legacy `dksubs-proxy` hostname as a network alias during migration.
 
 ## Cosmos Install
@@ -50,6 +52,7 @@ The container expects Docker DNS names for the media stack:
 - `http://prowlarr:9696`
 - `http://radarr:7878`
 - `http://sonarr:8989`
+- `http://seerr:5055` when the full stack is installed
 - `http://danish-intelligence:9699`
 - `http://altmount:8080` when AltMount is installed
 
@@ -189,6 +192,14 @@ For AltMount integration:
   host `danish-intelligence`, port `9699`, URL base `/altmount`.
 - If `ALTMOUNT_APIKEY` is not supplied, the `/altmount` shim adds local
   Radarr/Sonarr API credentials on the internal request to AltMount.
+
+For Seerr integration:
+
+- The full stack deploys Seerr as `http://seerr:5055`.
+- Seerr keeps its private state in `/app/config`, backed by
+  `{Context.ConfigRoot}/seerr`.
+- Seerr's first-run Jellyfin, Radarr, and Sonarr API keys belong in Seerr's UI
+  or private config volume, never in the market JSON.
 
 ## Security Notes
 

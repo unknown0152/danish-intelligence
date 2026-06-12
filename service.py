@@ -225,6 +225,7 @@ async def _status_payload(app: web.Application) -> dict:
     prowlarr_url = os.getenv("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
     radarr_url = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
     sonarr_url = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
+    seerr_url = os.getenv("SEERR_URL", "http://seerr:5055").rstrip("/")
     altmount_url = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
     altmount_base_url = altmount_url.split("/sabnzbd", 1)[0].rstrip("/")
 
@@ -235,6 +236,7 @@ async def _status_payload(app: web.Application) -> dict:
         "radarr_reachable": await _http_ok(app, f"{radarr_url}/api/v3/system/status", radarr_key),
         "sonarr_key": bool(sonarr_key),
         "sonarr_reachable": await _http_ok(app, f"{sonarr_url}/api/v3/system/status", sonarr_key),
+        "seerr_reachable": await _http_ok(app, f"{seerr_url}/api/v1/settings/public"),
         "altmount_reachable": await _http_ok(app, f"{altmount_base_url}/"),
         "oldboys_optional": True,
         "auto_config_success": _APP_STATE["auto_config"]["status"] == "success",
@@ -248,6 +250,7 @@ async def _status_payload(app: web.Application) -> dict:
             "radarr_reachable",
             "sonarr_key",
             "sonarr_reachable",
+            "seerr_reachable",
             "altmount_reachable",
             "auto_config_success",
         )
@@ -260,6 +263,7 @@ async def _status_payload(app: web.Application) -> dict:
         "service": {
             "version": getattr(main_proxy, "VERSION", "unknown"),
             "proxy_url": os.getenv("PROXY_URL", "http://danish-intelligence:9699"),
+            "seerr_url": seerr_url,
         },
     }
 

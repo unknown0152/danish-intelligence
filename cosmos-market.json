@@ -49,12 +49,13 @@
       "id": "danish-master-stack",
       "name": "Danish Media Stack (Full Install)",
       "description": "The Ultimate 1-Click Danish Media Stack",
-      "longDescription": "<p><b>The Total Automation Blueprint</b></p><p>This installs everything in one click: <b>Plex, Radarr, Sonarr, AltMount, and Danish Intelligence.</b></p><p><i>Note: Install and configure Prowlarr manually first!</i></p><p>Once installed, the Intelligence core will automatically discover your pre-configured Prowlarr and the new Arrs. It will build the Kometa-ready folder structures (<code>/media/movies</code>, <code>/media/tv</code>), set up the AltMount download clients, and paint all Danish Custom Formats and Quality Profiles. Zero manual configuration required.</p>",
+      "longDescription": "<p><b>The Total Automation Blueprint</b></p><p>This installs everything in one click: <b>Plex, Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.</b></p><p><i>Note: Install and configure Prowlarr manually first!</i></p><p>Once installed, the Intelligence core will automatically discover your pre-configured Prowlarr and the new Arrs. It will build the Kometa-ready folder structures (<code>/media/movies</code>, <code>/media/tv</code>), set up the AltMount download clients, paint all Danish Custom Formats and Quality Profiles, and expose Seerr on the same internal media network for request management. No private Seerr, Jellyfin, Radarr, or Sonarr API keys are stored in this market manifest.</p>",
       "url": "https://github.com/unknown0152/danish-intelligence",
       "tags": [
         "radarr",
         "sonarr",
         "plex",
+        "seerr",
         "danish",
         "intelligence",
         "stack",
@@ -67,7 +68,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=4"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=5"
     }
   ]
 }
