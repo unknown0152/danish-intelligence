@@ -46,10 +46,10 @@
       "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json?v=11"
     },
     {
-      "id": "danish-master-stack",
-      "name": "Danish Media Stack (Full Install)",
-      "description": "The Ultimate 1-Click Danish Media Stack",
-      "longDescription": "<p><b>The Total Automation Blueprint</b></p><p>This installs everything in one click: <b>Plex, Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.</b></p><p><i>Note: Install and configure Prowlarr manually first!</i></p><p>Once installed, the Intelligence core will automatically discover your pre-configured Prowlarr and the new Arrs. It will build the Kometa-ready folder structures (<code>/media/movies</code>, <code>/media/tv</code>), set up the AltMount download clients, paint all Danish Custom Formats and Quality Profiles, and expose Seerr on the same internal media network for request management. No private Seerr, Jellyfin, Radarr, or Sonarr API keys are stored in this market manifest.</p>",
+      "id": "danish-master-stack-plex",
+      "name": "Danish Media Stack (Plex Edition)",
+      "description": "The 1-click Danish Media Stack with Plex",
+      "longDescription": "<p><b>The Total Automation Blueprint - Plex Edition</b></p><p>This installs everything in one click: <b>Plex, Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.</b></p><p><i>Note: Install and configure Prowlarr manually first!</i></p><p>Once installed, the Intelligence core will automatically discover your pre-configured Prowlarr and the new Arrs. It will build the Kometa-ready folder structures (<code>/media/movies</code>, <code>/media/tv</code>), set up the AltMount download clients, paint all Danish Custom Formats and Quality Profiles, and expose Seerr on the same internal media network for request management. No private Seerr, Plex, Radarr, or Sonarr API keys are stored in this market manifest.</p>",
       "url": "https://github.com/unknown0152/danish-intelligence",
       "tags": [
         "radarr",
@@ -68,7 +68,32 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=5"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=6"
+    },
+    {
+      "id": "danish-master-stack-jellyfin",
+      "name": "Danish Media Stack (Jellyfin Edition)",
+      "description": "The 1-click Danish Media Stack with Jellyfin",
+      "longDescription": "<p><b>The Total Automation Blueprint - Jellyfin Edition</b></p><p>This installs everything in one click: <b>Jellyfin, Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.</b></p><p><i>Note: Install and configure Prowlarr manually first!</i></p><p>Once installed, the Intelligence core will automatically discover your pre-configured Prowlarr and the new Arrs. It will build the Kometa-ready folder structures (<code>/media/movies</code>, <code>/media/tv</code>), set up the AltMount download clients, paint all Danish Custom Formats and Quality Profiles, and expose Seerr on the same internal media network for request management. No private Seerr, Jellyfin, Radarr, or Sonarr API keys are stored in this market manifest.</p>",
+      "url": "https://github.com/unknown0152/danish-intelligence",
+      "tags": [
+        "radarr",
+        "sonarr",
+        "jellyfin",
+        "seerr",
+        "danish",
+        "intelligence",
+        "stack",
+        "bundle"
+      ],
+      "repository": "https://github.com/unknown0152/danish-intelligence",
+      "image": "ghcr.io/unknown0152/danish-intelligence",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png",
+      "screenshots": [],
+      "supported_architectures": [
+        "amd64"
+      ],
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack-jellyfin.json?v=1"
     }
   ]
 }

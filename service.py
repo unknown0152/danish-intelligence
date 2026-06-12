@@ -226,8 +226,18 @@ async def _status_payload(app: web.Application) -> dict:
     radarr_url = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
     sonarr_url = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
     seerr_url = os.getenv("SEERR_URL", "http://seerr:5055").rstrip("/")
+    media_server_type = os.getenv("MEDIA_SERVER_TYPE", "").strip().lower()
+    media_server_url = os.getenv("MEDIA_SERVER_URL", "").rstrip("/")
     altmount_url = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
     altmount_base_url = altmount_url.split("/sabnzbd", 1)[0].rstrip("/")
+    media_server_health_url = ""
+    if media_server_url:
+        if media_server_type == "plex":
+            media_server_health_url = f"{media_server_url}/identity"
+        elif media_server_type == "jellyfin":
+            media_server_health_url = f"{media_server_url}/System/Info/Public"
+        else:
+            media_server_health_url = media_server_url
 
     checks = {
         "prowlarr_key": bool(prowlarr_key),
@@ -237,6 +247,7 @@ async def _status_payload(app: web.Application) -> dict:
         "sonarr_key": bool(sonarr_key),
         "sonarr_reachable": await _http_ok(app, f"{sonarr_url}/api/v3/system/status", sonarr_key),
         "seerr_reachable": await _http_ok(app, f"{seerr_url}/api/v1/settings/public"),
+        "media_server_reachable": await _http_ok(app, media_server_health_url) if media_server_health_url else True,
         "altmount_reachable": await _http_ok(app, f"{altmount_base_url}/"),
         "oldboys_optional": True,
         "auto_config_success": _APP_STATE["auto_config"]["status"] == "success",
@@ -251,6 +262,7 @@ async def _status_payload(app: web.Application) -> dict:
             "sonarr_key",
             "sonarr_reachable",
             "seerr_reachable",
+            "media_server_reachable",
             "altmount_reachable",
             "auto_config_success",
         )
@@ -264,6 +276,8 @@ async def _status_payload(app: web.Application) -> dict:
             "version": getattr(main_proxy, "VERSION", "unknown"),
             "proxy_url": os.getenv("PROXY_URL", "http://danish-intelligence:9699"),
             "seerr_url": seerr_url,
+            "media_server_type": media_server_type or "external",
+            "media_server_url": media_server_url,
         },
     }
 

@@ -45,6 +45,14 @@ On startup, the service waits briefly for the Arrs, then configures Radarr and
 Sonarr through their HTTP APIs. It discovers Arr API keys from read-only config
 mounts and does not require Docker socket access.
 
+The market offers two full-stack editions:
+
+- `Danish Media Stack (Plex Edition)` deploys Plex as the media server.
+- `Danish Media Stack (Jellyfin Edition)` deploys Jellyfin as the media server.
+
+Both editions include Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.
+Only the selected media server is deployed.
+
 ## Expected Network
 
 The container expects Docker DNS names for the media stack:
@@ -53,6 +61,8 @@ The container expects Docker DNS names for the media stack:
 - `http://radarr:7878`
 - `http://sonarr:8989`
 - `http://seerr:5055` when the full stack is installed
+- `http://plex:32400` in the Plex edition
+- `http://jellyfin:8096` in the Jellyfin edition
 - `http://danish-intelligence:9699`
 - `http://altmount:8080` when AltMount is installed
 

@@ -51,8 +51,8 @@
                 "CACHE_DB=/config/proxy_cache.db",
                 "OB_PROXY_DB=/config/ob_meta.db",
                 "SEERR_URL=http://seerr:5055",
-                "MEDIA_SERVER_TYPE=plex",
-                "MEDIA_SERVER_URL=http://plex:32400",
+                "MEDIA_SERVER_TYPE=jellyfin",
+                "MEDIA_SERVER_URL=http://jellyfin:8096",
                 "LISTEN_PORT=9699",
                 "LISTEN_HOST=0.0.0.0"
             ],
@@ -164,19 +164,18 @@
                 "media-stack": {}
             }
         },
-        "plex": {
-            "image": "lscr.io/linuxserver/plex:latest",
-            "container_name": "plex",
+        "jellyfin": {
+            "image": "lscr.io/linuxserver/jellyfin:latest",
+            "container_name": "jellyfin",
             "restart": "unless-stopped",
             "environment": [
                 "PUID=1001",
                 "PGID=1001",
-                "TZ=Europe/Copenhagen",
-                "VERSION=docker"
+                "TZ=Europe/Copenhagen"
             ],
             "volumes": [
                 {
-                    "source": "{Context.ConfigRoot}/plex",
+                    "source": "{Context.ConfigRoot}/jellyfin",
                     "target": "/config",
                     "type": "bind"
                 },
@@ -196,7 +195,8 @@
             ],
             "labels": {
                 "cosmos-auto-update": "true",
-                "cosmos-force-network-secured": "true"
+                "cosmos-force-network-secured": "true",
+                "cosmos-icon": "https://raw.githubusercontent.com/jellyfin/jellyfin-web/master/src/assets/img/icon-transparent.png"
             },
             "networks": {
                 "media-stack": {}
