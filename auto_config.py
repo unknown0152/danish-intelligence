@@ -270,7 +270,7 @@ def _cf_payload(name: str, pattern: str, include_rename: bool = False, required:
 def _managed_cf_payloads() -> list[dict[str, Any]]:
     return [
         _cf_payload(CF_DANISH_AUDIO, rf"(?:\[Danish Audio\]|{re.escape(DK_AUDIO_TITLE)}\b|{re.escape(LEGACY_DK_AUDIO_TITLE)}\b)", include_rename=True),
-        _cf_payload(CF_DANISH_SUBTITLES, rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b|[._-]NorTekst\b)", include_rename=True),
+        _cf_payload(CF_DANISH_SUBTITLES, rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b)", include_rename=True),
         {
             "id": 0,
             "name": "TrueHD Atmos",
@@ -556,6 +556,75 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
     _post_json(session, f"{api}/downloadclient?forceSave=true", app.api_key, new_client)
     return 1
 
+
+def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
+    api = f"{app.url}/api/v3"
+    webhook_name = "Danish Intelligence Marker Preserver"
+    webhook_url = f"{ARR_PROXY_URL}/arr/{app.name.lower()}"
+
+    notifications = _get_json(session, f"{api}/notification", app.api_key)
+    existing = None
+    for notification in notifications:
+        url = str(_field(notification, "url", ""))
+        if notification.get("name") == webhook_name or url == webhook_url:
+            existing = notification
+            break
+
+    if existing:
+        payload = existing
+    else:
+        schemas = _get_json(session, f"{api}/notification/schema", app.api_key)
+        payload = next((schema for schema in schemas if schema.get("implementation") == "Webhook"), None)
+        if not payload:
+            print(f"[Core] Auto-Config: {app.name} Webhook notification schema unavailable", flush=True)
+            return 0
+
+    payload["name"] = webhook_name
+    payload["implementation"] = "Webhook"
+    payload["implementationName"] = "Webhook"
+    payload["configContract"] = "WebhookSettings"
+    _set_field(payload, "url", webhook_url)
+    _set_field(payload, "method", 1)
+    _set_field(payload, "username", "")
+    _set_field(payload, "password", "")
+    _set_field(payload, "headers", [])
+
+    for flag in (
+        "onGrab",
+        "onDownload",
+        "onUpgrade",
+        "onRename",
+        "onMovieAdded",
+        "onSeriesAdd",
+        "onImportComplete",
+        "onMovieDelete",
+        "onSeriesDelete",
+        "onMovieFileDelete",
+        "onEpisodeFileDelete",
+        "onMovieFileDeleteForUpgrade",
+        "onEpisodeFileDeleteForUpgrade",
+        "onHealthIssue",
+        "includeHealthWarnings",
+        "onHealthRestored",
+        "onApplicationUpdate",
+        "onManualInteractionRequired",
+    ):
+        if flag in payload:
+            payload[flag] = False
+
+    for flag in ("onDownload", "onUpgrade", "onRename"):
+        if flag in payload:
+            payload[flag] = True
+    if app.name == "Sonarr" and "onImportComplete" in payload:
+        payload["onImportComplete"] = True
+
+    if existing:
+        _put_json(session, f"{api}/notification/{payload['id']}?forceSave=true", app.api_key, payload)
+    else:
+        _post_json(session, f"{api}/notification?forceSave=true", app.api_key, payload)
+    return 1
+
+
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     for app in apps:
@@ -586,7 +655,7 @@ def paint() -> dict[str, int]:
     if not apps:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0}
     for app in apps:
         _paint_naming(session, app)
         _paint_indexer_config(session, app)
@@ -594,16 +663,19 @@ def paint() -> dict[str, int]:
         cf_count, profile_count = _paint_formats_and_profiles(session, app)
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
         download_clients = _ensure_download_client(session, app)
+        webhooks = _ensure_marker_webhook(session, app)
         totals["apps"] += 1
         totals["root_folders"] += root_folders
         totals["custom_formats"] += cf_count
         totals["profiles"] += profile_count
         totals["linked_indexers"] += linked
         totals["download_clients"] += download_clients
+        totals["webhooks"] += webhooks
         print(
             f"[Core] Auto-Config: {app.name} painted {cf_count} CFs, "
             f"{profile_count} profiles, linked {linked} indexers, "
-            f"{download_clients} download clients, created {root_folders} root folders",
+            f"{download_clients} download clients, {webhooks} webhooks, "
+            f"created {root_folders} root folders",
             flush=True,
         )
 

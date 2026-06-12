@@ -81,6 +81,11 @@
                     "target": "/arr-config/sonarr",
                     "type": "bind",
                     "read_only": true
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
                 }
             ],
             "networks": {

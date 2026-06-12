@@ -82,17 +82,21 @@ It also creates or updates:
 - `Danish Subtitles` profile: `minFormatScore=10000`, `cutoffFormatScore=0`, Danish Subtitles `10000`, Danish Audio `0`.
 
 The proxy emits `.DanishAudio` and `.DanishSubs` markers. Legacy `.DKaudio` and
-`.DKOK` markers are accepted only as compatibility aliases. `NorTekst` is also
-accepted by the Danish Subtitles CF so AltMount imports keep their subtitle score
-when the NZB/folder name contains `.DanishSubs` but the inner MKV filename has
-only the shorter Nordic text marker.
+`.DKOK` markers are accepted only as compatibility aliases. Post-import
+automation should preserve the matching `[Danish Audio]` or `[Danish Subtitles]`
+marker in the imported filename when the inner NZB file name does not contain the
+proxy marker.
 
 ## Code Map
 
 - `tags.py`: single source of truth for Danish markers, Arr CF names, profile
   names, and legacy aliases.
 - `auto_config.py`: Cosmos-safe painter for Arr naming, root folders, CFs,
-  profiles, proxy indexers, Prowlarr sync hardening, and AltMount clients.
+  profiles, proxy indexers, Prowlarr sync hardening, AltMount clients, and
+  marker-preserver webhooks.
+- `marker_preserver.py`: Radarr/Sonarr webhook handler that copies proxy-level
+  Danish markers into imported `/media` symlink filenames when inner NZB file
+  names lack the proxy marker.
 - `app.py`: Newznab proxy request handler and status/health endpoints.
 - `hunt.py`: Danish release detection pipeline and import-learning endpoint.
 - `classification.py`: title, NFO, ffprobe, and mismatch classification helpers.

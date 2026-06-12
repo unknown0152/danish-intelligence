@@ -40,6 +40,7 @@ _load_package_alias()
 # 1. Import Danish Intelligence modular logic
 from danish_intelligence import app as main_proxy
 from danish_intelligence.hunt import _handle_learn_imported
+from danish_intelligence.marker_preserver import handle_arr_webhook
 from danish_intelligence.autopilot import run_autopilot
 from danish_intelligence.auto_config import paint as paint_auto_config
 
@@ -300,6 +301,14 @@ async def handle_status(request: web.Request) -> web.Response:
     payload = await _status_payload(request.app)
     return web.Response(text=_status_html(payload), content_type="text/html")
 
+
+async def handle_radarr_webhook(request: web.Request) -> web.Response:
+    return await handle_arr_webhook(request, "radarr")
+
+
+async def handle_sonarr_webhook(request: web.Request) -> web.Response:
+    return await handle_arr_webhook(request, "sonarr")
+
 async def main():
     app = web.Application(client_max_size=10*1024*1024)
     app.on_startup.append(on_startup)
@@ -324,6 +333,8 @@ async def main():
     # dksubs metrics and learn
     app.router.add_get("/metrics", lambda r: web.json_response(dict(_metrics)))
     app.router.add_post("/learn/imported", _handle_learn_imported)
+    app.router.add_post("/arr/radarr", handle_radarr_webhook)
+    app.router.add_post("/arr/sonarr", handle_sonarr_webhook)
     
     # NFO Hunter catch-all
     app.router.add_route('*', '/{tail:.*}', handle)
