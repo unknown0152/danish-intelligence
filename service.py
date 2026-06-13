@@ -16,6 +16,7 @@ import aiohttp
 
 PACKAGE_NAME = "danish_intelligence"
 PACKAGE_DIR = Path(__file__).resolve().parent
+ALTMOUNT_SHIM_MAX_UPLOAD_MB = int(os.getenv("ALTMOUNT_SHIM_MAX_UPLOAD_MB", "128"))
 
 
 def _load_package_alias() -> None:
@@ -328,7 +329,7 @@ async def handle_sonarr_webhook(request: web.Request) -> web.Response:
     return await handle_arr_webhook(request, "sonarr")
 
 async def main():
-    app = web.Application(client_max_size=10*1024*1024)
+    app = web.Application(client_max_size=ALTMOUNT_SHIM_MAX_UPLOAD_MB * 1024 * 1024)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
 

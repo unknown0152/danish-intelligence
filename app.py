@@ -27,6 +27,7 @@ from .nfo_fetch import _search_rate_limit_ok, load_indexer_configs
 ALTMOUNT_VISIBLE_ROOT = os.getenv("ALTMOUNT_VISIBLE_ROOT", "/mnt/altmount").rstrip("/")
 ALTMOUNT_URL = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
 ALTMOUNT_API_KEY = os.getenv("ALTMOUNT_API_KEY") or os.getenv("ALTMOUNT_APIKEY") or ""
+ALTMOUNT_SHIM_MAX_UPLOAD_MB = int(os.getenv("ALTMOUNT_SHIM_MAX_UPLOAD_MB", "128"))
 RADARR_URL = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
 SONARR_URL = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
 
@@ -370,7 +371,7 @@ async def on_cleanup(app):
 
 
 async def main():
-    app = web.Application(client_max_size=10*1024*1024); app.on_startup.append(on_startup)
+    app = web.Application(client_max_size=ALTMOUNT_SHIM_MAX_UPLOAD_MB * 1024 * 1024); app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
     app.router.add_get("/health", lambda r: web.json_response({"status": "ok", "version": VERSION}))
     app.router.add_get("/metrics", lambda r: web.json_response(dict(_metrics)))
