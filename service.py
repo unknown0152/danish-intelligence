@@ -328,6 +328,13 @@ async def handle_radarr_webhook(request: web.Request) -> web.Response:
 async def handle_sonarr_webhook(request: web.Request) -> web.Response:
     return await handle_arr_webhook(request, "sonarr")
 
+
+async def handle_arr_instance_webhook(request: web.Request) -> web.Response:
+    source = request.match_info.get("source", "").strip().lower()
+    if not source.startswith(("radarr", "sonarr")):
+        return web.Response(status=404, text="unknown arr source\n")
+    return await handle_arr_webhook(request, source)
+
 async def main():
     app = web.Application(client_max_size=ALTMOUNT_SHIM_MAX_UPLOAD_MB * 1024 * 1024)
     app.on_startup.append(on_startup)
@@ -354,6 +361,7 @@ async def main():
     app.router.add_post("/learn/imported", _handle_learn_imported)
     app.router.add_post("/arr/radarr", handle_radarr_webhook)
     app.router.add_post("/arr/sonarr", handle_sonarr_webhook)
+    app.router.add_post("/arr/{source}", handle_arr_instance_webhook)
     
     # NFO Hunter catch-all
     app.router.add_route('*', '/{tail:.*}', handle)

@@ -63,6 +63,10 @@ MANAGED_CF_NAMES = {
     "HEVC",
 }
 DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
+DEFAULT_2160P_APP_URLS = {
+    "Radarr": "http://radarr-2160p:7878",
+    "Sonarr": "http://sonarr-2160p:8989",
+}
 PROXY_URL = os.getenv("PROXY_URL", "http://danish-intelligence:9699").rstrip("/")
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
 
@@ -89,12 +93,18 @@ ARR_CONFIG_PATHS = {
     "Prowlarr": ("/arr-config/prowlarr/config.xml", "/srv/config/prowlarr/config.xml"),
     "Radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
     "Sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
+    "radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
+    "sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
+    "radarr-2160p": ("/arr-config/radarr-2160p/config.xml", "/srv/config/radarr-2160p/config.xml"),
+    "sonarr-2160p": ("/arr-config/sonarr-2160p/config.xml", "/srv/config/sonarr-2160p/config.xml"),
 }
 
 
 @dataclass
 class ArrApp:
     name: str
+    kind: str
+    slug: str
     url: str
     api_key: str
 
@@ -120,6 +130,45 @@ def _headers(api_key: str) -> dict[str, str]:
 def _clean_env(name: str) -> str:
     value = os.getenv(name, "")
     return "" if value.startswith("{") and value.endswith("}") else value
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "arr"
+
+
+def _env_prefix(value: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "_", value.upper()).strip("_")
+
+
+def _arr_kind(app: dict[str, Any]) -> str:
+    for value in (
+        app.get("implementation"),
+        app.get("implementationName"),
+        app.get("configContract"),
+        app.get("name"),
+    ):
+        text = str(value or "").lower()
+        if "radarr" in text:
+            return "Radarr"
+        if "sonarr" in text:
+            return "Sonarr"
+    return ""
+
+
+def _is_2160p_instance(name: str, url: str = "") -> bool:
+    text = f"{name} {url}".lower()
+    return any(token in text for token in ("2160p", "2160", "uhd", "4k"))
+
+
+def _default_arr_url(kind: str, name: str) -> str:
+    if _is_2160p_instance(name):
+        return DEFAULT_2160P_APP_URLS[kind]
+    return DEFAULT_APP_URLS[kind]
+
+
+def _truthy_env(name: str) -> bool:
+    return _clean_env(name).lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _get_json(session: requests.Session, url: str, api_key: str) -> Any:
@@ -180,30 +229,77 @@ def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
     )
 
 
+def _bootstrap_optional_2160p_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
+    if not _truthy_env("ENABLE_2160P_ARRS"):
+        return
+
+    apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
+    existing_names = {_slug(str(app.get("name", ""))) for app in apps}
+    schemas = _get_json(session, f"{prowlarr_url}/api/v1/applications/schema", prowlarr_key)
+
+    for kind, name, url in (
+        ("Radarr", "Radarr 2160p", DEFAULT_2160P_APP_URLS["Radarr"]),
+        ("Sonarr", "Sonarr 2160p", DEFAULT_2160P_APP_URLS["Sonarr"]),
+    ):
+        if _slug(name) in existing_names:
+            continue
+
+        api_key = _first_working_arr_key(session, kind, name, url)
+        if not api_key:
+            print(f"[Core] Auto-Config: {name} is enabled but not reachable yet; Prowlarr registration skipped", flush=True)
+            continue
+
+        schema = copy.deepcopy(next((item for item in schemas if _arr_kind(item) == kind), None))
+        if not schema:
+            print(f"[Core] Auto-Config: Prowlarr {kind} application schema unavailable; {name} skipped", flush=True)
+            continue
+
+        schema["name"] = name
+        schema["enable"] = True
+        schema["syncLevel"] = "addOnly"
+        _set_field(schema, "prowlarrUrl", ARR_PROXY_URL)
+        _set_field(schema, "baseUrl", url)
+        _set_field(schema, "apiKey", api_key)
+        try:
+            _post_json(session, f"{prowlarr_url}/api/v1/applications?forceSave=true", prowlarr_key, schema)
+            print(f"[Core] Auto-Config: registered {name} in Prowlarr", flush=True)
+        except requests.RequestException as exc:
+            print(f"[Core] Auto-Config: failed to register {name} in Prowlarr: {exc}", flush=True)
+
+
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     discovered: list[ArrApp] = []
     for app in apps:
         name = app.get("name", "")
-        if name not in DEFAULT_APP_URLS:
+        kind = _arr_kind(app)
+        if kind not in DEFAULT_APP_URLS:
             continue
-        url = str(_field(app, "baseUrl") or DEFAULT_APP_URLS[name]).rstrip("/")
+        default_url = _default_arr_url(kind, name)
+        url = str(_field(app, "baseUrl") or default_url).rstrip("/")
         prowlarr_app_key = str(_field(app, "apiKey") or "")
-        api_key = _first_working_arr_key(session, name, url, prowlarr_app_key)
-        if not api_key and url != DEFAULT_APP_URLS[name]:
-            url = DEFAULT_APP_URLS[name]
-            api_key = _first_working_arr_key(session, name, url, prowlarr_app_key)
+        api_key = _first_working_arr_key(session, kind, name, url, prowlarr_app_key)
+        if not api_key and url != default_url:
+            url = default_url
+            api_key = _first_working_arr_key(session, kind, name, url, prowlarr_app_key)
         if not api_key:
             print(f"[Core] Auto-Config: {name} API key unavailable or unauthorized", flush=True)
             continue
-        discovered.append(ArrApp(name=name, url=url.rstrip("/"), api_key=api_key))
+        discovered.append(ArrApp(name=name, kind=kind, slug=_slug(name), url=url.rstrip("/"), api_key=api_key))
     return discovered
 
 
-def _first_working_arr_key(session: requests.Session, app_name: str, url: str, prowlarr_app_key: str = "") -> str:
-    env_names = [f"{app_name.upper()}_API_KEY", f"{app_name.upper()}_APIKEY"]
+def _first_working_arr_key(session: requests.Session, kind: str, app_name: str, url: str, prowlarr_app_key: str = "") -> str:
+    env_prefixes = [_env_prefix(app_name), kind.upper()]
+    if _is_2160p_instance(app_name, url):
+        env_prefixes.insert(0, f"{kind.upper()}_2160P")
+    env_names = [
+        env_name
+        for prefix in dict.fromkeys(env_prefixes)
+        for env_name in (f"{prefix}_API_KEY", f"{prefix}_APIKEY")
+    ]
     candidates = [_clean_env(name) for name in env_names]
-    candidates.append(_read_arr_config_key(app_name))
+    candidates.extend(_read_arr_config_keys(kind, app_name, url))
     # Prowlarr often stores stale 8-char app keys; keep it last as a compatibility fallback.
     if prowlarr_app_key:
         candidates.append(prowlarr_app_key)
@@ -218,27 +314,41 @@ def _first_working_arr_key(session: requests.Session, app_name: str, url: str, p
     return ""
 
 
-def _read_arr_config_key(app_name: str) -> str:
-    key = app_name[:1].upper() + app_name[1:].lower()
-    for path in ARR_CONFIG_PATHS.get(key, ()):
-        cfg = Path(path)
-        if not cfg.exists():
-            continue
-        try:
-            root = ET.parse(cfg).getroot()
-            key = root.findtext("ApiKey", default="").strip()
-            if key:
-                return key
-        except Exception as exc:
-            print(f"[Core] Auto-Config: could not read {path}: {exc}", flush=True)
-    return ""
+def _read_arr_config_keys(kind: str, app_name: str = "", url: str = "") -> list[str]:
+    keys: list[str] = []
+    config_keys = [kind]
+    if app_name:
+        config_keys.append(_slug(app_name))
+    host = urlparse(url).hostname or ""
+    if host:
+        config_keys.append(host)
+    if _is_2160p_instance(app_name, url):
+        config_keys.append(f"{kind.lower()}-2160p")
+
+    seen_paths: set[str] = set()
+    for config_key in dict.fromkeys(config_keys):
+        for path in ARR_CONFIG_PATHS.get(config_key, ()):
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            cfg = Path(path)
+            if not cfg.exists():
+                continue
+            try:
+                root = ET.parse(cfg).getroot()
+                api_key = root.findtext("ApiKey", default="").strip()
+                if api_key:
+                    keys.append(api_key)
+            except Exception as exc:
+                print(f"[Core] Auto-Config: could not read {path}: {exc}", flush=True)
+    return keys
 
 
 def _prowlarr_api_key() -> str:
     return (
         _clean_env("PROWLARR_API_KEY")
         or _clean_env("PROWLARR_APIKEY")
-        or _read_arr_config_key("Prowlarr")
+        or next(iter(_read_arr_config_keys("Prowlarr")), "")
     )
 
 
@@ -445,11 +555,11 @@ def _paint_naming(session: requests.Session, app: ArrApp) -> None:
     api = f"{app.url}/api/v3"
     naming = _get_json(session, f"{api}/config/naming", app.api_key)
     
-    if app.name == "Radarr":
+    if app.kind == "Radarr":
         naming["renameMovies"] = True
         naming["movieFolderFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}}"
         naming["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
-    elif app.name == "Sonarr":
+    elif app.kind == "Sonarr":
         naming["renameEpisodes"] = True
         naming["seriesFolderFormat"] = "{Series TitleYear} {tvdb-{TvdbId}}"
         naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
@@ -498,10 +608,14 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
     existing = _get_json(session, f"{api}/rootfolder", app.api_key)
     existing_paths = {f.get("path", "").rstrip("/") for f in existing}
     
-    radarr_paths = ["/media/movies", "/media/kids-movies"]
-    sonarr_paths = ["/media/tv", "/media/kids-tv"]
+    if _is_2160p_instance(app.name, app.url):
+        radarr_paths = ["/media/movies-2160p"]
+        sonarr_paths = ["/media/tv-2160p"]
+    else:
+        radarr_paths = ["/media/movies", "/media/kids-movies"]
+        sonarr_paths = ["/media/tv", "/media/kids-tv"]
     
-    target_paths = radarr_paths if app.name == "Radarr" else sonarr_paths
+    target_paths = radarr_paths if app.kind == "Radarr" else sonarr_paths
     added = 0
     
     for path in target_paths:
@@ -534,7 +648,7 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
         print("[Core] Auto-Config: Cannot create AltMount client; PROXY_API_KEY is missing.", flush=True)
         return 0
 
-    category = "movies" if app.name == "Radarr" else "tv"
+    category = "movies" if app.kind == "Radarr" else "tv"
     new_client = {
         "enable": True,
         "name": "AltMount",
@@ -548,9 +662,9 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
             {"name": "apiKey", "value": proxy_api_key},
             {"name": "username", "value": ""},
             {"name": "password", "value": ""},
-            {"name": "movieCategory" if app.name == "Radarr" else "tvCategory", "value": category},
-            {"name": "recentMoviePriority" if app.name == "Radarr" else "recentTvPriority", "value": 0},
-            {"name": "olderMoviePriority" if app.name == "Radarr" else "olderTvPriority", "value": 0}
+            {"name": "movieCategory" if app.kind == "Radarr" else "tvCategory", "value": category},
+            {"name": "recentMoviePriority" if app.kind == "Radarr" else "recentTvPriority", "value": 0},
+            {"name": "olderMoviePriority" if app.kind == "Radarr" else "olderTvPriority", "value": 0}
         ]
     }
     _post_json(session, f"{api}/downloadclient?forceSave=true", app.api_key, new_client)
@@ -560,7 +674,7 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
 def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
     api = f"{app.url}/api/v3"
     webhook_name = "Danish Intelligence Marker Preserver"
-    webhook_url = f"{ARR_PROXY_URL}/arr/{app.name.lower()}"
+    webhook_url = f"{ARR_PROXY_URL}/arr/{app.slug}"
 
     notifications = _get_json(session, f"{api}/notification", app.api_key)
     existing = None
@@ -615,7 +729,7 @@ def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
     for flag in ("onDownload", "onUpgrade", "onRename"):
         if flag in payload:
             payload[flag] = True
-    if app.name == "Sonarr" and "onImportComplete" in payload:
+    if app.kind == "Sonarr" and "onImportComplete" in payload:
         payload["onImportComplete"] = True
 
     if existing:
@@ -629,10 +743,11 @@ def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prow
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     for app in apps:
         name = app.get("name", "")
-        if name not in DEFAULT_APP_URLS:
+        kind = _arr_kind(app)
+        if kind not in DEFAULT_APP_URLS:
             continue
         app["syncLevel"] = "addOnly"
-        drop = [2020, 2030, 2060, 2070] if name == "Radarr" else [5030]
+        drop = [2020, 2030, 2060, 2070] if kind == "Radarr" else [5030]
         sync_categories = _field(app, "syncCategories")
         if isinstance(sync_categories, list):
             _set_field(app, "syncCategories", [cat for cat in sync_categories if cat not in drop])
@@ -650,6 +765,7 @@ def paint() -> dict[str, int]:
         raise RuntimeError("Prowlarr API key is not set and no mounted Prowlarr config.xml was found")
 
     session = requests.Session()
+    _bootstrap_optional_2160p_apps(session, prowlarr_url, prowlarr_key)
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
     apps = _discover_arr_apps(session, prowlarr_url, prowlarr_key)
     if not apps:

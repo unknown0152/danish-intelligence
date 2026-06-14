@@ -33,6 +33,8 @@ DANISH_MARKERS = (
 ARR_CONFIG_PATHS = {
     "radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
     "sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
+    "radarr-2160p": ("/arr-config/radarr-2160p/config.xml", "/srv/config/radarr-2160p/config.xml"),
+    "sonarr-2160p": ("/arr-config/sonarr-2160p/config.xml", "/srv/config/sonarr-2160p/config.xml"),
 }
 
 
@@ -41,26 +43,49 @@ def _clean_env(name: str) -> str:
     return "" if value.startswith("{") and value.endswith("}") else value
 
 
-def _read_arr_key(source: str) -> str:
-    app_name = source.upper()
-    for env_name in (f"{app_name}_API_KEY", f"{app_name}_APIKEY"):
-        value = _clean_env(env_name)
-        if value:
-            return value
+def _source_kind(source: str) -> str:
+    return "sonarr" if source.startswith("sonarr") else "radarr"
 
-    for path in ARR_CONFIG_PATHS[source]:
+
+def _env_prefix(value: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "_", value.upper()).strip("_")
+
+
+def _read_arr_key(source: str) -> str:
+    kind = _source_kind(source)
+    prefixes = [_env_prefix(source), kind.upper()]
+    if "2160" in source:
+        prefixes.insert(0, f"{kind.upper()}_2160P")
+    for prefix in dict.fromkeys(prefixes):
+        for env_name in (f"{prefix}_API_KEY", f"{prefix}_APIKEY"):
+            value = _clean_env(env_name)
+            if value:
+                return value
+
+    for path in ARR_CONFIG_PATHS.get(source, ()) + ARR_CONFIG_PATHS.get(kind, ()):
         try:
             root = ET.parse(path).getroot()
-            return (root.findtext("ApiKey") or "").strip()
+            api_key = (root.findtext("ApiKey") or "").strip()
+            if api_key:
+                return api_key
         except Exception:
             continue
     return ""
 
 
 def _arr_url(source: str) -> str:
-    if source == "sonarr":
-        return os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
-    return os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
+    kind = _source_kind(source)
+    for env_name in (f"{_env_prefix(source)}_URL", f"{kind.upper()}_URL"):
+        value = _clean_env(env_name)
+        if value:
+            return value.rstrip("/")
+    if source == "sonarr-2160p":
+        return "http://sonarr-2160p:8989"
+    if source == "radarr-2160p":
+        return "http://radarr-2160p:7878"
+    if kind == "sonarr":
+        return "http://sonarr:8989"
+    return "http://radarr:7878"
 
 
 def _headers(api_key: str) -> dict[str, str]:
@@ -135,7 +160,7 @@ async def _history_marker_candidates(session: aiohttp.ClientSession, source: str
     if not item_id:
         return []
 
-    path = f"history/movie?movieId={item_id}" if source == "radarr" else f"history/series?seriesId={item_id}"
+    path = f"history/movie?movieId={item_id}" if _source_kind(source) == "radarr" else f"history/series?seriesId={item_id}"
     history = await _get_json(session, source, path, api_key)
     records = history.get("records", []) if isinstance(history, dict) else history
 
@@ -149,13 +174,13 @@ async def _history_marker_candidates(session: aiohttp.ClientSession, source: str
 async def _rescan(session: aiohttp.ClientSession, source: str, item_id: int | None, api_key: str) -> None:
     if not item_id:
         return
-    if source == "sonarr":
-        await _post_json(session, "sonarr", "command", api_key, {"name": "RescanSeries", "seriesId": item_id})
+    if _source_kind(source) == "sonarr":
+        await _post_json(session, source, "command", api_key, {"name": "RescanSeries", "seriesId": item_id})
     else:
-        await _post_json(session, "radarr", "command", api_key, {"name": "RescanMovie", "movieId": item_id})
+        await _post_json(session, source, "command", api_key, {"name": "RescanMovie", "movieId": item_id})
 
 
-async def _preserve_radarr(session: aiohttp.ClientSession, payload: dict[str, Any], api_key: str) -> str:
+async def _preserve_radarr(session: aiohttp.ClientSession, source: str, payload: dict[str, Any], api_key: str) -> str:
     movie = payload.get("movie") or payload.get("remoteMovie", {}).get("movie") or {}
     movie_file = payload.get("movieFile") or {}
     movie_id = movie.get("id") or payload.get("movieId")
@@ -163,12 +188,12 @@ async def _preserve_radarr(session: aiohttp.ClientSession, payload: dict[str, An
 
     markers = _payload_markers(payload)
     if not markers:
-        markers = _markers_from_text(*await _history_marker_candidates(session, "radarr", movie_id, api_key))
+        markers = _markers_from_text(*await _history_marker_candidates(session, source, movie_id, api_key))
     if not markers:
         return "no marker"
 
     if movie_file_id:
-        movie_file = await _get_json(session, "radarr", f"moviefile/{movie_file_id}", api_key)
+        movie_file = await _get_json(session, source, f"moviefile/{movie_file_id}", api_key)
 
     path = movie_file.get("path") or movie_file.get("relativePath") or ""
     if path and not path.startswith("/"):
@@ -179,11 +204,11 @@ async def _preserve_radarr(session: aiohttp.ClientSession, payload: dict[str, An
     if not new_path:
         return "no file"
 
-    await _rescan(session, "radarr", movie_id, api_key)
+    await _rescan(session, source, movie_id, api_key)
     return f"preserved {', '.join(markers)}"
 
 
-async def _preserve_sonarr(session: aiohttp.ClientSession, payload: dict[str, Any], api_key: str) -> str:
+async def _preserve_sonarr(session: aiohttp.ClientSession, source: str, payload: dict[str, Any], api_key: str) -> str:
     series = payload.get("series") or {}
     series_id = series.get("id") or payload.get("seriesId")
     files = list(payload.get("episodeFiles") or [])
@@ -192,7 +217,7 @@ async def _preserve_sonarr(session: aiohttp.ClientSession, payload: dict[str, An
 
     markers = _payload_markers(payload)
     if not markers:
-        markers = _markers_from_text(*await _history_marker_candidates(session, "sonarr", series_id, api_key))
+        markers = _markers_from_text(*await _history_marker_candidates(session, source, series_id, api_key))
     if not markers:
         return "no marker"
 
@@ -200,7 +225,7 @@ async def _preserve_sonarr(session: aiohttp.ClientSession, payload: dict[str, An
     for episode_file in files:
         episode_file_id = episode_file.get("id")
         if episode_file_id:
-            episode_file = await _get_json(session, "sonarr", f"episodefile/{episode_file_id}", api_key)
+            episode_file = await _get_json(session, source, f"episodefile/{episode_file_id}", api_key)
 
         path = episode_file.get("path") or episode_file.get("relativePath") or ""
         if path and not path.startswith("/"):
@@ -213,7 +238,7 @@ async def _preserve_sonarr(session: aiohttp.ClientSession, payload: dict[str, An
     if not preserved:
         return "no file"
 
-    await _rescan(session, "sonarr", series_id, api_key)
+    await _rescan(session, source, series_id, api_key)
     return f"preserved {', '.join(markers)} on {preserved} file(s)"
 
 
@@ -226,10 +251,10 @@ async def _preserve_after_delay(source: str, payload: dict[str, Any]) -> None:
 
     try:
         async with aiohttp.ClientSession() as session:
-            if source == "sonarr":
-                result = await _preserve_sonarr(session, payload, api_key)
+            if _source_kind(source) == "sonarr":
+                result = await _preserve_sonarr(session, source, payload, api_key)
             else:
-                result = await _preserve_radarr(session, payload, api_key)
+                result = await _preserve_radarr(session, source, payload, api_key)
         print(f"[MarkerPreserver] {source}: {result}", flush=True)
     except Exception as exc:
         print(f"[MarkerPreserver] {source}: failed: {exc}", flush=True)

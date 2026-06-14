@@ -51,7 +51,10 @@ The market offers two full-stack editions:
 - `Danish Media Stack (Jellyfin Edition)` deploys Jellyfin as the media server.
 
 Both editions include Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.
-Only the selected media server is deployed.
+Only the selected media server is deployed. The full-stack installer also has
+an optional `Install separate 2160p Radarr and Sonarr` checkbox. When enabled,
+it adds `radarr-2160p` and `sonarr-2160p`, registers them in Prowlarr when
+reachable, and paints them with separate 2160p root folders.
 
 ## Expected Network
 
@@ -60,6 +63,8 @@ The container expects Docker DNS names for the media stack:
 - `http://prowlarr:9696`
 - `http://radarr:7878`
 - `http://sonarr:8989`
+- `http://radarr-2160p:7878` when the optional 2160p Arrs are enabled
+- `http://sonarr-2160p:8989` when the optional 2160p Arrs are enabled
 - `http://seerr:5055` when the full stack is installed
 - `http://plex:32400` in the Plex edition
 - `http://jellyfin:8096` in the Jellyfin edition
