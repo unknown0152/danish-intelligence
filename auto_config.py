@@ -8,6 +8,7 @@ containers should not require.
 from __future__ import annotations
 
 import copy
+import json
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -98,6 +99,11 @@ ARR_CONFIG_PATHS = {
     "radarr-2160p": ("/arr-config/radarr-2160p/config.xml", "/srv/config/radarr-2160p/config.xml"),
     "sonarr-2160p": ("/arr-config/sonarr-2160p/config.xml", "/srv/config/sonarr-2160p/config.xml"),
 }
+SEERR_CONFIG_PATHS = (
+    "/seerr-config/settings.json",
+    "/app/config/settings.json",
+    "/srv/config/seerr/settings.json",
+)
 
 
 @dataclass
@@ -350,6 +356,24 @@ def _prowlarr_api_key() -> str:
         or _clean_env("PROWLARR_APIKEY")
         or next(iter(_read_arr_config_keys("Prowlarr")), "")
     )
+
+
+def _seerr_api_key() -> str:
+    env_key = _clean_env("SEERR_API_KEY") or _clean_env("SEERR_APIKEY")
+    if env_key:
+        return env_key
+    for path in SEERR_CONFIG_PATHS:
+        cfg = Path(path)
+        if not cfg.exists():
+            continue
+        try:
+            data = json.loads(cfg.read_text())
+            api_key = str(data.get("main", {}).get("apiKey") or "").strip()
+            if api_key:
+                return api_key
+        except Exception as exc:
+            print(f"[Core] Auto-Config: could not read Seerr settings from {path}: {exc}", flush=True)
+    return ""
 
 
 def _arr_reachable(session: requests.Session, url: str, api_key: str) -> bool:
@@ -739,6 +763,113 @@ def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
     return 1
 
 
+def _profile_id_by_name(session: requests.Session, app: ArrApp, profile_name: str) -> int | None:
+    profiles = _get_json(session, f"{app.url}/api/v3/qualityprofile", app.api_key)
+    profile = next((item for item in profiles if item.get("name") == profile_name), None)
+    return int(profile["id"]) if profile and profile.get("id") is not None else None
+
+
+def _seerr_server_url(app: ArrApp) -> str:
+    parsed = urlparse(app.url)
+    base_url = parsed.path.rstrip("/")
+    return urlunparse((parsed.scheme or "http", parsed.netloc, base_url, "", "", ""))
+
+
+def _seerr_base_payload(app: ArrApp, profile_name: str, profile_id: int, root_path: str, is_default: bool) -> dict[str, Any]:
+    parsed = urlparse(app.url)
+    hostname = parsed.hostname or app.slug
+    port = parsed.port or (443 if parsed.scheme == "https" else (8989 if app.kind == "Sonarr" else 7878))
+    base_url = parsed.path.rstrip("/")
+    label = "Movies" if app.kind == "Radarr" else "TV"
+    if profile_name == PROFILE_DANISH_AUDIO:
+        label = f"{label} 2160p - Danish Audio"
+    else:
+        label = f"{label} 2160p - Danish Subtitles"
+
+    payload: dict[str, Any] = {
+        "name": label,
+        "hostname": hostname,
+        "port": port,
+        "apiKey": app.api_key,
+        "useSsl": parsed.scheme == "https",
+        "baseUrl": base_url,
+        "url": _seerr_server_url(app),
+        "activeProfileId": profile_id,
+        "activeProfileName": profile_name,
+        "activeDirectory": root_path,
+        "is4k": True,
+        "isDefault": is_default,
+        "externalUrl": "",
+        "syncEnabled": True,
+        "preventSearch": False,
+        "tagRequests": False,
+        "tags": [],
+    }
+    if app.kind == "Radarr":
+        payload["minimumAvailability"] = "released"
+    else:
+        payload.update({
+            "seriesType": "standard",
+            "animeTags": [],
+            "enableSeasonFolders": True,
+            "monitorNewItems": "all",
+        })
+    return payload
+
+
+def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
+    if not _truthy_env("ENABLE_2160P_ARRS") or not _is_2160p_instance(app.name, app.url):
+        return 0
+
+    seerr_key = _seerr_api_key()
+    if not seerr_key:
+        print("[Core] Auto-Config: Seerr API key unavailable; 2160p Seerr entries skipped", flush=True)
+        return 0
+
+    seerr_url = os.getenv("SEERR_URL", "http://seerr:5055").rstrip("/")
+    endpoint = "radarr" if app.kind == "Radarr" else "sonarr"
+    root_path = "/media/movies-2160p" if app.kind == "Radarr" else "/media/tv-2160p"
+    wanted = (
+        (PROFILE_DANISH_SUBTITLES, True),
+        (PROFILE_DANISH_AUDIO, False),
+    )
+
+    try:
+        existing = _get_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key)
+    except requests.RequestException as exc:
+        print(f"[Core] Auto-Config: Seerr {endpoint} settings unavailable; 2160p entries skipped: {exc}", flush=True)
+        return 0
+
+    changed = 0
+    for profile_name, is_default in wanted:
+        profile_id = _profile_id_by_name(session, app, profile_name)
+        if profile_id is None:
+            print(f"[Core] Auto-Config: {app.name} profile {profile_name} unavailable; Seerr entry skipped", flush=True)
+            continue
+
+        payload = _seerr_base_payload(app, profile_name, profile_id, root_path, is_default)
+        match = next((
+            item for item in existing
+            if bool(item.get("is4k")) is True
+            and str(item.get("hostname", "")).lower() == payload["hostname"].lower()
+            and int(item.get("port", 0) or 0) == int(payload["port"])
+            and item.get("activeDirectory") == root_path
+            and item.get("activeProfileName") == profile_name
+        ), None)
+
+        try:
+            if match:
+                payload["id"] = match["id"]
+                _put_json(session, f"{seerr_url}/api/v1/settings/{endpoint}/{match['id']}", seerr_key, payload)
+            else:
+                _post_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key, payload)
+            changed += 1
+        except requests.RequestException as exc:
+            print(f"[Core] Auto-Config: failed to upsert Seerr {payload['name']}: {exc}", flush=True)
+
+    return changed
+
+
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     for app in apps:
@@ -771,7 +902,7 @@ def paint() -> dict[str, int]:
     if not apps:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_servers": 0}
     for app in apps:
         _paint_naming(session, app)
         _paint_indexer_config(session, app)
@@ -780,6 +911,7 @@ def paint() -> dict[str, int]:
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
         download_clients = _ensure_download_client(session, app)
         webhooks = _ensure_marker_webhook(session, app)
+        seerr_servers = _ensure_seerr_2160p_servers(session, app)
         totals["apps"] += 1
         totals["root_folders"] += root_folders
         totals["custom_formats"] += cf_count
@@ -787,10 +919,12 @@ def paint() -> dict[str, int]:
         totals["linked_indexers"] += linked
         totals["download_clients"] += download_clients
         totals["webhooks"] += webhooks
+        totals["seerr_servers"] += seerr_servers
         print(
             f"[Core] Auto-Config: {app.name} painted {cf_count} CFs, "
             f"{profile_count} profiles, linked {linked} indexers, "
             f"{download_clients} download clients, {webhooks} webhooks, "
+            f"{seerr_servers} Seerr servers, "
             f"created {root_folders} root folders",
             flush=True,
         )

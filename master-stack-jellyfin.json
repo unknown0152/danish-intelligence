@@ -92,6 +92,12 @@
                     "type": "bind",
                     "read_only": true
                 },
+                {
+                    "source": "{Context.ConfigRoot}/seerr",
+                    "target": "/seerr-config",
+                    "type": "bind",
+                    "read_only": true
+                },
                 {if Context.Enable2160p}
                 {
                     "source": "{Context.ConfigRoot}/radarr-2160p",

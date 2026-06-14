@@ -54,7 +54,9 @@ Both editions include Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.
 Only the selected media server is deployed. The full-stack installer also has
 an optional `Install separate 2160p Radarr and Sonarr` checkbox. When enabled,
 it adds `radarr-2160p` and `sonarr-2160p`, registers them in Prowlarr when
-reachable, and paints them with separate 2160p root folders.
+reachable, paints them with separate 2160p root folders, and adds matching
+2160p Radarr/Sonarr server entries to Seerr when Seerr has already generated
+its API key.
 
 ## Expected Network
 
@@ -213,6 +215,9 @@ For Seerr integration:
 - The full stack deploys Seerr as `http://seerr:5055`.
 - Seerr keeps its private state in `/app/config`, backed by
   `{Context.ConfigRoot}/seerr`.
+- Danish Intelligence mounts that config read-only at `/seerr-config` and uses
+  Seerr's own API to add optional 2160p Arr server entries. Seerr secrets are
+  read from the private config volume and are not stored in the market JSON.
 - Seerr's first-run Jellyfin, Radarr, and Sonarr API keys belong in Seerr's UI
   or private config volume, never in the market JSON.
 
