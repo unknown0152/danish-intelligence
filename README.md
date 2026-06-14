@@ -205,10 +205,15 @@ For AltMount integration:
 - Playback-safe defaults keep failure masking enabled, cap background imports
   while streams are active, and size the segment cache for high-bitrate Plex
   playback.
+- The full stack pins the native FUSE mount shape used by the Arrs:
+  mount type `fuse`, mount path `/mnt/altmount`, and metadata under
+  `/config/metadata`.
 - Import Processing is kept Radarr/Sonarr focused: video extensions only,
   sample filtering enabled, release-name renaming enabled, failed items cleaned
   after 24 hours, import history retained for 30 days, and completed NZBs kept
   for repair/debug workflows.
+- ARR queue cleanup is enabled with a 10 minute grace period. Automatic orphan
+  metadata cleanup remains disabled by default; repair-on-import stays enabled.
 - The full stack defines AltMount SAB categories from the manifest. Standard
   Arrs use `movies` and `tv`; optional 2160p Arrs use `movies-2160p` and
   `tv-2160p`.
