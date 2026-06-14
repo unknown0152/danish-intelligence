@@ -19,6 +19,8 @@ CF_DANISH_SUBTITLES = "Danish Subtitles"
 
 PROFILE_DANISH_AUDIO = "Danish Audio"
 PROFILE_DANISH_SUBTITLES = "Danish Subtitles"
+PROFILE_DANISH_AUDIO_2160P = "Danish Audio 2160p"
+PROFILE_DANISH_SUBTITLES_2160P = "Danish Subtitles 2160p"
 
 DK_AUDIO_TITLE = ".DanishAudio"
 DK_SUBS_TITLE = ".DanishSubs"

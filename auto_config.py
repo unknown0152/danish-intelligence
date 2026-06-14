@@ -30,7 +30,9 @@ try:
         LEGACY_DK_SUBS_TITLE,
         LEGACY_PROFILE_NAMES,
         PROFILE_DANISH_AUDIO,
+        PROFILE_DANISH_AUDIO_2160P,
         PROFILE_DANISH_SUBTITLES,
+        PROFILE_DANISH_SUBTITLES_2160P,
     )
 except ImportError:  # Allows `python3 auto_config.py` during manual debugging.
     from tags import (
@@ -43,7 +45,9 @@ except ImportError:  # Allows `python3 auto_config.py` during manual debugging.
         LEGACY_DK_SUBS_TITLE,
         LEGACY_PROFILE_NAMES,
         PROFILE_DANISH_AUDIO,
+        PROFILE_DANISH_AUDIO_2160P,
         PROFILE_DANISH_SUBTITLES,
+        PROFILE_DANISH_SUBTITLES_2160P,
     )
 
 MANAGED_CF_NAMES = {
@@ -171,6 +175,12 @@ def _altmount_download_category(app: ArrApp) -> str:
     if _is_2160p_instance(app.name, app.url):
         return "movies-2160p" if app.kind == "Radarr" else "tv-2160p"
     return "movies" if app.kind == "Radarr" else "tv"
+
+
+def _danish_profile_names(app: ArrApp) -> tuple[str, str]:
+    if _is_2160p_instance(app.name, app.url):
+        return PROFILE_DANISH_AUDIO_2160P, PROFILE_DANISH_SUBTITLES_2160P
+    return PROFILE_DANISH_AUDIO, PROFILE_DANISH_SUBTITLES
 
 
 def _default_arr_url(kind: str, name: str) -> str:
@@ -522,8 +532,9 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
     profiles = _get_json(session, f"{api}/qualityprofile", app.api_key)
     if profiles:
         codec_scores = {k: v for k, v in scores.items() if k not in {CF_DANISH_AUDIO, CF_DANISH_SUBTITLES}}
-        _upsert_profile(session, app, profiles, PROFILE_DANISH_AUDIO, {CF_DANISH_AUDIO: 10000, CF_DANISH_SUBTITLES: 0, **codec_scores}, cf_ids, valid_cf_ids)
-        _upsert_profile(session, app, profiles, PROFILE_DANISH_SUBTITLES, {CF_DANISH_AUDIO: 0, CF_DANISH_SUBTITLES: 10000, **codec_scores}, cf_ids, valid_cf_ids)
+        audio_profile, subtitles_profile = _danish_profile_names(app)
+        _upsert_profile(session, app, profiles, audio_profile, {CF_DANISH_AUDIO: 10000, CF_DANISH_SUBTITLES: 0, **codec_scores}, cf_ids, valid_cf_ids)
+        _upsert_profile(session, app, profiles, subtitles_profile, {CF_DANISH_AUDIO: 0, CF_DANISH_SUBTITLES: 10000, **codec_scores}, cf_ids, valid_cf_ids)
 
     return len(cf_ids), 2 if profiles else 0
 
@@ -533,6 +544,47 @@ def _complete_format_items(valid_cf_ids: set[int], scores_by_id: dict[int, int])
         {"format": fmt_id, "score": int(scores_by_id.get(fmt_id, 0))}
         for fmt_id in sorted(valid_cf_ids)
     ]
+
+
+def _quality_name(item: dict[str, Any]) -> str:
+    quality = item.get("quality") or item.get("qualityGroup") or {}
+    name = str(quality.get("name") or "")
+    child_names = [
+        _quality_name(child)
+        for child in item.get("items", [])
+        if isinstance(child, dict)
+    ]
+    return " ".join([name, *child_names]).strip()
+
+
+def _quality_id(item: dict[str, Any]) -> int | None:
+    quality = item.get("quality") or {}
+    if quality.get("id") is not None:
+        return int(quality["id"])
+    return None
+
+
+def _force_2160p_quality_items(profile: dict[str, Any]) -> None:
+    cutoff = None
+    for item in profile.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        allowed = "2160" in _quality_name(item).lower()
+        item["allowed"] = allowed
+        if allowed:
+            quality_id = _quality_id(item)
+            if quality_id is not None:
+                cutoff = quality_id
+        for child in item.get("items", []):
+            if not isinstance(child, dict):
+                continue
+            child_allowed = "2160" in _quality_name(child).lower()
+            child["allowed"] = child_allowed
+            child_id = _quality_id(child)
+            if child_allowed and child_id is not None:
+                cutoff = child_id
+    if cutoff is not None:
+        profile["cutoff"] = cutoff
 
 
 def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[str, Any]], name: str, scores: dict[str, int], cf_ids: dict[str, int], valid_cf_ids: set[int]) -> None:
@@ -549,6 +601,8 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
         for fmt_name, score in scores.items()
         if fmt_name in cf_ids
     })
+    if _is_2160p_instance(app.name, app.url):
+        _force_2160p_quality_items(profile)
     if existing is None:
         _post_json(session, f"{app.url}/api/v3/qualityprofile", app.api_key, profile)
     else:
@@ -788,7 +842,7 @@ def _seerr_base_payload(app: ArrApp, profile_name: str, profile_id: int, root_pa
     port = parsed.port or (443 if parsed.scheme == "https" else (8989 if app.kind == "Sonarr" else 7878))
     base_url = parsed.path.rstrip("/")
     label = "Movies" if app.kind == "Radarr" else "TV"
-    if profile_name == PROFILE_DANISH_AUDIO:
+    if "audio" in profile_name.lower():
         label = f"{label} 2160p - Danish Audio"
     else:
         label = f"{label} 2160p - Danish Subtitles"
@@ -836,9 +890,10 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
     seerr_url = os.getenv("SEERR_URL", "http://seerr:5055").rstrip("/")
     endpoint = "radarr" if app.kind == "Radarr" else "sonarr"
     root_path = "/media/movies-2160p" if app.kind == "Radarr" else "/media/tv-2160p"
+    audio_profile, subtitles_profile = _danish_profile_names(app)
     wanted = (
-        (PROFILE_DANISH_SUBTITLES, True),
-        (PROFILE_DANISH_AUDIO, False),
+        (subtitles_profile, True),
+        (audio_profile, False),
     )
 
     try:
@@ -861,7 +916,7 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
             and str(item.get("hostname", "")).lower() == payload["hostname"].lower()
             and int(item.get("port", 0) or 0) == int(payload["port"])
             and item.get("activeDirectory") == root_path
-            and item.get("activeProfileName") == profile_name
+            and (item.get("activeProfileName") == profile_name or item.get("name") == payload["name"])
         ), None)
 
         try:

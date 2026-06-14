@@ -56,9 +56,11 @@ an optional `Install separate 2160p Radarr and Sonarr` checkbox. When enabled,
 it adds `radarr-2160p` and `sonarr-2160p`, registers them in Prowlarr when
 reachable, paints them with separate 2160p root folders, and adds matching
 2160p Radarr/Sonarr server entries to Seerr when Seerr has already generated
-its API key. Optional 2160p Arrs also use their own AltMount SAB categories
-(`movies-2160p` and `tv-2160p`) so queue/history entries stay separate from
-standard `movies` and `tv` activity.
+its API key. Optional 2160p Arrs get explicit `Danish Audio 2160p` and
+`Danish Subtitles 2160p` quality profiles with only 2160p qualities enabled,
+and they use their own AltMount SAB categories (`movies-2160p` and
+`tv-2160p`) so queue/history entries stay separate from standard `movies` and
+`tv` activity.
 
 ## Expected Network
 
@@ -102,6 +104,8 @@ It also creates or updates:
 
 - `Danish Audio` profile: `minFormatScore=10000`, `cutoffFormatScore=0`, Danish Audio `10000`, Danish Subtitles `0`.
 - `Danish Subtitles` profile: `minFormatScore=10000`, `cutoffFormatScore=0`, Danish Subtitles `10000`, Danish Audio `0`.
+- `Danish Audio 2160p` profile on optional 2160p Arrs: same Danish Audio requirement, with non-2160p qualities disabled.
+- `Danish Subtitles 2160p` profile on optional 2160p Arrs: same Danish Subtitles requirement, with non-2160p qualities disabled.
 
 The proxy emits `.DanishAudio` and `.DanishSubs` markers. Legacy `.DKaudio` and
 `.DKOK` markers are accepted only as compatibility aliases. Post-import
