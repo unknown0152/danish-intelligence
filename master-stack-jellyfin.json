@@ -133,6 +133,7 @@
                 "PORT=8080",
                 "LOG_LEVEL=warn",
                 "JWT_SECRET={Passwords.64}",
+                "ALTMOUNT_SABNZBD_CATEGORIES=movies|1|0|movies|radarr;tv|2|0|tv|sonarr;movies-2160p|3|0|movies-2160p|radarr;tv-2160p|4|0|tv-2160p|sonarr;music|5|0|music|;books|6|0|books|;adult|7|0|adult|",
                 "ALTMOUNT_STREAMING_FAILURE_MASKING_ENABLED=true",
                 "ALTMOUNT_STREAMING_FAILURE_MASKING_THRESHOLD=3",
                 "ALTMOUNT_IMPORT_MAX_CONCURRENT_IMPORTS=2",

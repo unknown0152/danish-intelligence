@@ -167,6 +167,12 @@ def _is_2160p_instance(name: str, url: str = "") -> bool:
     return any(token in text for token in ("2160p", "2160", "uhd", "4k"))
 
 
+def _altmount_download_category(app: ArrApp) -> str:
+    if _is_2160p_instance(app.name, app.url):
+        return "movies-2160p" if app.kind == "Radarr" else "tv-2160p"
+    return "movies" if app.kind == "Radarr" else "tv"
+
+
 def _default_arr_url(kind: str, name: str) -> str:
     if _is_2160p_instance(name):
         return DEFAULT_2160P_APP_URLS[kind]
@@ -656,6 +662,7 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
     api = f"{app.url}/api/v3"
     clients = _get_json(session, f"{api}/downloadclient", app.api_key)
     proxy_api_key = os.getenv("PROXY_API_KEY", "")
+    category = _altmount_download_category(app)
     
     for client in clients:
         if _is_altmount_proxy_client(client):
@@ -663,6 +670,7 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
             _set_field(client, "port", PROXY_PORT)
             _set_field(client, "useSsl", PROXY_USE_SSL)
             _set_field(client, "urlBase", "/altmount")
+            _set_field(client, "movieCategory" if app.kind == "Radarr" else "tvCategory", category)
             if proxy_api_key:
                 _set_field(client, "apiKey", proxy_api_key)
             _put_json(session, f"{api}/downloadclient/{client['id']}?forceSave=true", app.api_key, client)
@@ -672,7 +680,6 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
         print("[Core] Auto-Config: Cannot create AltMount client; PROXY_API_KEY is missing.", flush=True)
         return 0
 
-    category = "movies" if app.kind == "Radarr" else "tv"
     new_client = {
         "enable": True,
         "name": "AltMount",

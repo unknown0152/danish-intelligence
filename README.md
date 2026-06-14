@@ -56,7 +56,9 @@ an optional `Install separate 2160p Radarr and Sonarr` checkbox. When enabled,
 it adds `radarr-2160p` and `sonarr-2160p`, registers them in Prowlarr when
 reachable, paints them with separate 2160p root folders, and adds matching
 2160p Radarr/Sonarr server entries to Seerr when Seerr has already generated
-its API key.
+its API key. Optional 2160p Arrs also use their own AltMount SAB categories
+(`movies-2160p` and `tv-2160p`) so queue/history entries stay separate from
+standard `movies` and `tv` activity.
 
 ## Expected Network
 
@@ -203,6 +205,9 @@ For AltMount integration:
   sample filtering enabled, release-name renaming enabled, failed items cleaned
   after 24 hours, import history retained for 30 days, and completed NZBs kept
   for repair/debug workflows.
+- The full stack defines AltMount SAB categories from the manifest. Standard
+  Arrs use `movies` and `tv`; optional 2160p Arrs use `movies-2160p` and
+  `tv-2160p`.
 - Danish Intelligence defaults `ALTMOUNT_URL` to
   `http://altmount:8080/sabnzbd`.
 - Radarr/Sonarr download clients should point to Danish Intelligence:
