@@ -107,6 +107,12 @@ It also creates or updates:
 - `Danish Audio 2160p` profile on optional 2160p Arrs: same Danish Audio requirement, with non-2160p qualities disabled.
 - `Danish Subtitles 2160p` profile on optional 2160p Arrs: same Danish Subtitles requirement, with non-2160p qualities disabled.
 
+Normal Danish profiles allow DVD/DVD-R and 720p as fallback qualities, plus
+1080p/2160p, so older Danish titles can import when no HD release exists and
+still upgrade later. Unsafe or ambiguous qualities such as Unknown, CAM, TS,
+DVDSCR, SDTV, and Raw-HD remain disabled. The dedicated `2160p` profiles stay
+strictly 2160p-only.
+
 The proxy emits `.DanishAudio` and `.DanishSubs` markers. Legacy `.DKaudio` and
 `.DKOK` markers are accepted only as compatibility aliases. Post-import
 automation should preserve the matching `[Danish Audio]` or `[Danish Subtitles]`

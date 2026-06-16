@@ -587,6 +587,52 @@ def _force_2160p_quality_items(profile: dict[str, Any]) -> None:
         profile["cutoff"] = cutoff
 
 
+_NORMAL_PROFILE_BLOCKED_QUALITIES = {
+    "unknown",
+    "workprint",
+    "cam",
+    "telesync",
+    "telecine",
+    "regional",
+    "dvdscr",
+    "sdtv",
+    "raw-hd",
+}
+
+
+def _normal_profile_quality_allowed(name: str) -> bool:
+    lower = name.strip().lower()
+    if not lower:
+        return False
+    if lower in _NORMAL_PROFILE_BLOCKED_QUALITIES:
+        return False
+    if lower in {"dvd", "dvd-r"}:
+        return True
+    return any(resolution in lower for resolution in ("720p", "1080p", "2160p"))
+
+
+def _force_normal_quality_items(profile: dict[str, Any]) -> None:
+    """Allow sane fallback qualities for normal Arr profiles.
+
+    Older Danish releases often only exist as DVD/DVD-R or 720p. Keep obvious
+    bad/ambiguous qualities disabled, but allow Radarr/Sonarr to grab a valid
+    Danish release now and upgrade later if a higher quality appears.
+    """
+    for item in profile.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        children = [child for child in item.get("items", []) if isinstance(child, dict)]
+        if children:
+            child_allowed = []
+            for child in children:
+                allowed = _normal_profile_quality_allowed(_quality_name(child))
+                child["allowed"] = allowed
+                child_allowed.append(allowed)
+            item["allowed"] = any(child_allowed)
+        else:
+            item["allowed"] = _normal_profile_quality_allowed(_quality_name(item))
+
+
 def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[str, Any]], name: str, scores: dict[str, int], cf_ids: dict[str, int], valid_cf_ids: set[int]) -> None:
     existing = next((profile for profile in profiles if profile.get("name") == name), None)
     profile = copy.deepcopy(existing or profiles[0])
@@ -603,6 +649,8 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
     })
     if _is_2160p_instance(app.name, app.url):
         _force_2160p_quality_items(profile)
+    else:
+        _force_normal_quality_items(profile)
     if existing is None:
         _post_json(session, f"{app.url}/api/v3/qualityprofile", app.api_key, profile)
     else:
