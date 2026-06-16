@@ -5,6 +5,7 @@ import json
 import os
 import re
 import secrets
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -53,6 +54,95 @@ def _read_config_key(app_name: str) -> str:
 
 RADARR_API_KEY = _clean_env("RADARR_API_KEY") or _clean_env("RADARR_APIKEY") or _read_config_key("radarr")
 SONARR_API_KEY = _clean_env("SONARR_API_KEY") or _clean_env("SONARR_APIKEY") or _read_config_key("sonarr")
+
+_RADARR_NATIVE_TITLE_CACHE: dict[tuple[str, str], tuple[float, list[str]]] = {}
+_RADARR_NATIVE_TITLE_TTL = int(os.getenv("RADARR_NATIVE_TITLE_TTL", "3600"))
+
+
+def _is_danish_language(value) -> bool:
+    if isinstance(value, dict):
+        name = str(value.get("name") or "").strip().lower()
+        return name in {"danish", "dansk"}
+    return str(value or "").strip().lower() in {"danish", "dansk", "dan", "da"}
+
+
+def _movie_titles_from_payload(payload) -> list[str]:
+    titles = []
+    if not isinstance(payload, dict):
+        return titles
+    for key in ("title", "originalTitle"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            titles.append(value)
+    for item in payload.get("alternateTitles") or []:
+        if isinstance(item, dict):
+            value = str(item.get("title") or "").strip()
+            if value:
+                titles.append(value)
+    deduped = []
+    seen = set()
+    for title in titles:
+        folded = title.casefold()
+        if folded not in seen:
+            seen.add(folded)
+            deduped.append(title)
+    return deduped
+
+
+async def _radarr_native_titles_for_search(params: dict, session) -> list[str]:
+    """Return known titles for a Danish-original Radarr movie search.
+
+    This lets native Danish films be treated as Danish audio only when the
+    current Radarr search context confirms the exact tmdbid/imdbid belongs to a
+    Danish-original movie. It avoids broad rules like "NORDIC means audio".
+    """
+    if params.get("t") != "movie" or not RADARR_API_KEY:
+        return []
+    tmdbid = str(params.get("tmdbid") or params.get("tmdb_id") or "").strip()
+    imdbid = str(params.get("imdbid") or params.get("imdb_id") or "").strip()
+    if tmdbid:
+        lookup_kind, lookup_id = "tmdb", tmdbid
+        url = f"{RADARR_URL}/api/v3/movie/lookup/tmdb"
+        query = {"tmdbId": tmdbid}
+    elif imdbid:
+        lookup_kind, lookup_id = "imdb", imdbid
+        url = f"{RADARR_URL}/api/v3/movie/lookup/imdb"
+        query = {"imdbId": imdbid}
+    else:
+        return []
+
+    cache_key = (lookup_kind, lookup_id)
+    now = time.monotonic()
+    cached = _RADARR_NATIVE_TITLE_CACHE.get(cache_key)
+    if cached and now - cached[0] < _RADARR_NATIVE_TITLE_TTL:
+        return cached[1]
+
+    try:
+        headers = {"X-Api-Key": RADARR_API_KEY}
+        async with session.get(
+            url,
+            params=query,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=8),
+        ) as resp:
+            if resp.status != 200:
+                log(f"radarr-native-title: lookup {lookup_kind}:{lookup_id} returned {resp.status}", "DEBUG")
+                _RADARR_NATIVE_TITLE_CACHE[cache_key] = (now, [])
+                return []
+            payload = await resp.json(content_type=None)
+    except Exception as exc:
+        log(f"radarr-native-title: lookup {lookup_kind}:{lookup_id} failed: {exc!r}", "DEBUG")
+        _RADARR_NATIVE_TITLE_CACHE[cache_key] = (now, [])
+        return []
+
+    if not _is_danish_language(payload.get("originalLanguage")):
+        _RADARR_NATIVE_TITLE_CACHE[cache_key] = (now, [])
+        return []
+    titles = _movie_titles_from_payload(payload)
+    if titles:
+        log(f"radarr-native-title: {lookup_kind}:{lookup_id} -> {len(titles)} Danish titles", "DEBUG")
+    _RADARR_NATIVE_TITLE_CACHE[cache_key] = (now, titles)
+    return titles
 
 
 def _normalize_altmount_path(value: str) -> str:
@@ -251,6 +341,9 @@ async def _handle_inner(request, indexer_id, params, apikey, dedup_key):
 
         ext_id, ext_id_type = extract_external_id(params)
         media_type = "tv" if params.get("t") == "tvsearch" else "movie"
+        native_titles = []
+        if media_type == "movie":
+            native_titles = await _radarr_native_titles_for_search(params, session)
         verdict_suppressed = False
         if ext_id and DKSUBS_PROXY_V56_FEATURES:
             verdict_suppressed = await verdict_says_no_dk(
@@ -273,6 +366,7 @@ async def _handle_inner(request, indexer_id, params, apikey, dedup_key):
                 content, indexer_id, apikey, session,
                 title_only=is_title_only or verdict_suppressed,
                 params=params,
+                native_titles=native_titles,
             )
             if probe_results and DKSUBS_PROXY_V56_FEATURES:
                 await record_indexer_probes(indexer_id, probe_results)

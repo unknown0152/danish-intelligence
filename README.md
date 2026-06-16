@@ -118,6 +118,12 @@ release title can be trusted through `/config/native-dk-titles.txt`, one title
 per line. Matching is separator-tolerant, so `Villads fra Valby` matches scene
 titles like `Villads.Fra.Valby.2015.1080p.WEB...`.
 
+For Radarr movie searches, the proxy also uses the incoming `tmdbid`/`imdbid`
+context to ask Radarr whether the exact movie's original language is Danish. If
+so, Radarr/TMDb titles from that movie are used as temporary native-title
+matches for that search. Danish letters are matched against common scene ASCII
+folds, so `Fræk` also matches `Fraek`.
+
 ## Code Map
 
 - `tags.py`: single source of truth for Danish markers, Arr CF names, profile

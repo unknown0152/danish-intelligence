@@ -406,6 +406,22 @@ NATIVE_DK_FILE = Path(os.environ.get("NATIVE_DK_FILE", "/config/native-dk-titles
 _native_dk_cache: tuple = (0.0, [])     # (mtime, [compiled patterns])
 
 
+def _native_token_pattern(token: str) -> str:
+    """Return a regex token that accepts Danish letters and scene ASCII folds."""
+    parts = []
+    for ch in token:
+        lower = ch.lower()
+        if lower == "æ":
+            parts.append("(?:æ|ae)")
+        elif lower == "ø":
+            parts.append("(?:ø|oe)")
+        elif lower == "å":
+            parts.append("(?:å|aa)")
+        else:
+            parts.append(re.escape(ch))
+    return "".join(parts)
+
+
 def _native_title_pattern(title: str) -> re.Pattern[str] | None:
     """Compile a native title into a scene-title tolerant regex.
 
@@ -417,7 +433,7 @@ def _native_title_pattern(title: str) -> re.Pattern[str] | None:
     if not tokens:
         return None
     sep = r"[\W_]+"
-    pattern = r"(?<![A-Za-z0-9])" + sep.join(re.escape(t) for t in tokens) + r"(?![A-Za-z0-9])"
+    pattern = r"(?<![A-Za-z0-9])" + sep.join(_native_token_pattern(t) for t in tokens) + r"(?![A-Za-z0-9])"
     return re.compile(pattern, re.I)
 
 
@@ -457,12 +473,18 @@ NON_DK_LANG_RE = re.compile(
 )
 
 
-def is_native_dk_title(title: str) -> bool:
+def is_native_dk_title(title: str, extra_titles: list[str] | None = None) -> bool:
     """True if release title contains a known native-Danish show/movie name
     AND does NOT explicitly advertise a foreign-language audio."""
     if NON_DK_LANG_RE.search(title):
         return False
-    return any(p.search(title) for p in _load_native_dk())
+    patterns = list(_load_native_dk())
+    if extra_titles:
+        patterns.extend(
+            p for t in extra_titles
+            if t and (p := _native_title_pattern(t))
+        )
+    return any(p.search(title) for p in patterns)
 
 
 def normalize_result_tag(tag: str) -> str:

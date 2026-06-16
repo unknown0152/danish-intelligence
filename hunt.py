@@ -17,7 +17,8 @@ from .tags import NO_DK_TAG
 
 
 async def hunt_danish(content, indexer_id, apikey, session,
-                      title_only: bool = False, params: dict | None = None):
+                      title_only: bool = False, params: dict | None = None,
+                      native_titles: list[str] | None = None):
     """Returns (xml, probe_results_dict). probe_results maps nzb_id -> tag
     (or NO_DK_TAG) for each NFO probed in this search."""
     params = params or {}
@@ -45,9 +46,9 @@ async def hunt_danish(content, indexer_id, apikey, session,
                 skip_nfo_for_size = True
 
         # Native DK Check
-        if is_native_dk_title(title):
+        if is_native_dk_title(title, native_titles):
             found_hits[nid] = DK_AUDIO_TITLE
-            await cache_set(nid, DK_AUDIO_TITLE, title, source="title"); continue
+            await cache_set(nid, DK_AUDIO_TITLE, title, source="native-title"); continue
         
         # Audio Check
         if AUDIO_DK_RE.search(title):
