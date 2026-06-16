@@ -398,8 +398,27 @@ def _extract_nfo_media_tags(nfo_text: str) -> list[str]:
 
 
 # Native-Danish title list.
-NATIVE_DK_FILE = Path(os.environ.get("NATIVE_DK_FILE", "/cache/native-dk-titles.txt"))
+#
+# The container persists /config, not /cache. Keep this file user-editable and
+# durable so native Danish titles without an explicit DANiSH release tag can
+# still be trusted as Danish audio candidates.
+NATIVE_DK_FILE = Path(os.environ.get("NATIVE_DK_FILE", "/config/native-dk-titles.txt"))
 _native_dk_cache: tuple = (0.0, [])     # (mtime, [compiled patterns])
+
+
+def _native_title_pattern(title: str) -> re.Pattern[str] | None:
+    """Compile a native title into a scene-title tolerant regex.
+
+    A configured title such as "Villads fra Valby" must match release names
+    like "Villads.Fra.Valby.2015.1080p.WEB...", so separators are treated as
+    interchangeable instead of literal spaces.
+    """
+    tokens = [t for t in re.split(r"[\W_]+", title.strip(), flags=re.UNICODE) if t]
+    if not tokens:
+        return None
+    sep = r"[\W_]+"
+    pattern = r"(?<![A-Za-z0-9])" + sep.join(re.escape(t) for t in tokens) + r"(?![A-Za-z0-9])"
+    return re.compile(pattern, re.I)
 
 
 def _load_native_dk():
@@ -419,7 +438,7 @@ def _load_native_dk():
                 t = line.strip()
                 if t and not t.startswith("#"):
                     titles.append(t)
-        pats = [re.compile(r"\b" + re.escape(t) + r"\b", re.I) for t in titles]
+        pats = [p for t in titles if (p := _native_title_pattern(t))]
         _native_dk_cache = (st.st_mtime, pats)
         return pats
     except Exception:

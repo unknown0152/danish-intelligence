@@ -113,6 +113,11 @@ automation should preserve the matching `[Danish Audio]` or `[Danish Subtitles]`
 marker in the imported filename when the inner NZB file name does not contain the
 proxy marker.
 
+Native Danish movies and shows that do not advertise `DANiSH`/`DANSK` in the
+release title can be trusted through `/config/native-dk-titles.txt`, one title
+per line. Matching is separator-tolerant, so `Villads fra Valby` matches scene
+titles like `Villads.Fra.Valby.2015.1080p.WEB...`.
+
 ## Code Map
 
 - `tags.py`: single source of truth for Danish markers, Arr CF names, profile
