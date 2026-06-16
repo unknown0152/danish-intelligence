@@ -130,6 +130,12 @@ so, Radarr/TMDb titles from that movie are used as temporary native-title
 matches for that search. Danish letters are matched against common scene ASCII
 folds, so `Fræk` also matches `Fraek`.
 
+For Radarr text searches such as `Dreng 2011`, the proxy can also match the
+query back to the local Radarr movie list. This only activates when the query
+contains a year and exactly one Danish-original Radarr movie has that exact
+title or original title, keeping short generic titles like `Boy` from becoming
+global false positives.
+
 ## Code Map
 
 - `tags.py`: single source of truth for Danish markers, Arr CF names, profile

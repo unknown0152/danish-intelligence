@@ -14,7 +14,7 @@ from aiohttp import web
 
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from .__init__ import DK_AUDIO_TITLE, DK_SUBS_TITLE, DKSUBS_PROXY_V56_FEATURES, LISTEN_HOST, LISTEN_PORT, PROWLARR_API_KEY, PROWLARR_URL, SCENE_GROUP_ENABLED, VERSION, _enrich_ids, _metrics, _nfo_ids, _req_id, _scene_group_profiles, _title_only_ids, log
+from .__init__ import DK_AUDIO_TITLE, DK_SUBS_TITLE, DKSUBS_PROXY_V56_FEATURES, ITEM_RE, LISTEN_HOST, LISTEN_PORT, PROWLARR_API_KEY, PROWLARR_URL, SCENE_GROUP_ENABLED, TITLE_RE, VERSION, _enrich_ids, _metrics, _nfo_ids, _req_id, _scene_group_profiles, _title_only_ids, log
 from .cache import _db, backfill_scene_groups_from_cache, cache_init, rebuild_scene_group_profiles, record_indexer_probes
 from .classification import _empty_or_filler_response, _inject_probe_filler_if_empty, _is_status_probe, fold_scandi_query
 from .enrichment import enrich_with_extended_attrs
@@ -57,6 +57,7 @@ SONARR_API_KEY = _clean_env("SONARR_API_KEY") or _clean_env("SONARR_APIKEY") or 
 
 _RADARR_NATIVE_TITLE_CACHE: dict[tuple[str, str], tuple[float, list[str]]] = {}
 _RADARR_NATIVE_TITLE_TTL = int(os.getenv("RADARR_NATIVE_TITLE_TTL", "3600"))
+_RADARR_MOVIE_LIST_CACHE: tuple[float, list[dict]] = (0.0, [])
 
 
 def _is_danish_language(value) -> bool:
@@ -89,6 +90,139 @@ def _movie_titles_from_payload(payload) -> list[str]:
     return deduped
 
 
+def _title_key(title: str) -> str:
+    return " ".join(
+        token.casefold()
+        for token in re.split(r"[\W_]+", str(title or ""), flags=re.UNICODE)
+        if token
+    )
+
+
+def _query_title_and_year(query: str) -> tuple[str, int | None]:
+    tokens = [
+        token
+        for token in re.split(r"[\W_]+", str(query or ""), flags=re.UNICODE)
+        if token
+    ]
+    year = None
+    kept = []
+    for token in tokens:
+        if re.fullmatch(r"(?:19|20)\d{2}", token):
+            year = int(token)
+        else:
+            kept.append(token)
+    return " ".join(kept), year
+
+
+def _title_tokens(title: str) -> list[str]:
+    return [
+        token.casefold()
+        for token in re.split(r"[\W_]+", str(title or ""), flags=re.UNICODE)
+        if token
+    ]
+
+
+async def _radarr_movie_list(session) -> list[dict]:
+    global _RADARR_MOVIE_LIST_CACHE
+    now = time.monotonic()
+    cached_at, cached_movies = _RADARR_MOVIE_LIST_CACHE
+    if cached_movies and now - cached_at < _RADARR_NATIVE_TITLE_TTL:
+        return cached_movies
+    try:
+        headers = {"X-Api-Key": RADARR_API_KEY}
+        async with session.get(
+            f"{RADARR_URL}/api/v3/movie",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status != 200:
+                log(f"radarr-native-title: movie list returned {resp.status}", "DEBUG")
+                return cached_movies
+            movies = await resp.json(content_type=None)
+    except Exception as exc:
+        log(f"radarr-native-title: movie list failed: {exc!r}", "DEBUG")
+        return cached_movies
+    if isinstance(movies, list):
+        _RADARR_MOVIE_LIST_CACHE = (now, movies)
+        return movies
+    return cached_movies
+
+
+async def _radarr_native_titles_for_text_search(params: dict, session) -> list[str]:
+    if params.get("t") != "search" or not RADARR_API_KEY:
+        return []
+    query_title, query_year = _query_title_and_year(str(params.get("q") or ""))
+    if not query_title or query_year is None:
+        return []
+    query_key = _title_key(query_title)
+    matches = []
+    for movie in await _radarr_movie_list(session):
+        if not isinstance(movie, dict):
+            continue
+        if int(movie.get("year") or 0) != query_year:
+            continue
+        if not _is_danish_language(movie.get("originalLanguage")):
+            continue
+        titles = _movie_titles_from_payload(movie)
+        if any(_title_key(title) == query_key for title in titles):
+            matches.append(movie)
+    if len(matches) != 1:
+        return []
+    titles = _movie_titles_from_payload(matches[0])
+    if titles:
+        log(f"radarr-native-title: q={params.get('q')!r} -> {len(titles)} Danish titles", "DEBUG")
+    return titles
+
+
+def _release_starts_with_title_year(release_title: str, known_title: str, year: int) -> bool:
+    release_tokens = _title_tokens(release_title)
+    title_tokens = _title_tokens(known_title)
+    if not release_tokens or not title_tokens:
+        return False
+    if release_tokens[:len(title_tokens)] != title_tokens:
+        return False
+    rest = release_tokens[len(title_tokens):]
+    year_token = str(year)
+    if not rest:
+        return False
+    if len(title_tokens) == 1:
+        return rest[0] == year_token
+    return year_token in rest[:8]
+
+
+def _filter_text_search_to_native_titles(content: str, params: dict, native_titles: list[str]) -> str:
+    if params.get("t") != "search" or not native_titles:
+        return content
+    _, query_year = _query_title_and_year(str(params.get("q") or ""))
+    if query_year is None:
+        return content
+    items = ITEM_RE.findall(content)
+    if not items:
+        return content
+    kept = []
+    for item_xml in items:
+        title_m = TITLE_RE.search(item_xml)
+        if not title_m:
+            continue
+        release_title = title_m.group(2)
+        if any(_release_starts_with_title_year(release_title, title, query_year) for title in native_titles):
+            kept.append(item_xml)
+    if len(kept) == len(items):
+        return content
+    if not kept:
+        return ITEM_RE.sub("", content)
+    filtered = ITEM_RE.sub("", content)
+    filtered = filtered.replace("</channel>", "".join(kept) + "</channel>", 1)
+    filtered = re.sub(
+        r'(<newznab:response[^>]*\btotal=")\d+(")',
+        rf"\g<1>{len(kept)}\2",
+        filtered,
+        count=1,
+    )
+    log(f"text-search filter: kept {len(kept)}/{len(items)} reports for q={params.get('q')!r}", "DEBUG")
+    return filtered
+
+
 async def _radarr_native_titles_for_search(params: dict, session) -> list[str]:
     """Return known titles for a Danish-original Radarr movie search.
 
@@ -96,6 +230,8 @@ async def _radarr_native_titles_for_search(params: dict, session) -> list[str]:
     current Radarr search context confirms the exact tmdbid/imdbid belongs to a
     Danish-original movie. It avoids broad rules like "NORDIC means audio".
     """
+    if params.get("t") == "search":
+        return await _radarr_native_titles_for_text_search(params, session)
     if params.get("t") != "movie" or not RADARR_API_KEY:
         return []
     tmdbid = str(params.get("tmdbid") or params.get("tmdb_id") or "").strip()
@@ -344,6 +480,7 @@ async def _handle_inner(request, indexer_id, params, apikey, dedup_key):
         native_titles = []
         if media_type == "movie":
             native_titles = await _radarr_native_titles_for_search(params, session)
+            content = _filter_text_search_to_native_titles(content, params, native_titles)
         verdict_suppressed = False
         if ext_id and DKSUBS_PROXY_V56_FEATURES:
             verdict_suppressed = await verdict_says_no_dk(
