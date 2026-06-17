@@ -210,7 +210,7 @@ def _post_json(session: requests.Session, url: str, api_key: str, payload: Any) 
 def _delete(session: requests.Session, url: str, api_key: str) -> None:
     resp = _request(session, "DELETE", url, api_key, timeout=20)
     if resp.status_code not in (200, 202, 204, 404):
-        resp.raise_for_status()
+        _raise_for_status(resp, "DELETE", url)
 
 
 def _request(
@@ -255,8 +255,26 @@ def _request_json(
     timeout: int = 20,
 ) -> Any:
     resp = _request(session, method, url, api_key, payload=payload, timeout=timeout)
-    resp.raise_for_status()
+    _raise_for_status(resp, method, url)
     return resp.json() if resp.content else None
+
+
+def _raise_for_status(resp: requests.Response, method: str, url: str) -> None:
+    if resp.status_code < 400:
+        return
+    body = (resp.text or "").strip()
+    snippet = body[:1200]
+    record(
+        "auto_config.http_rejected",
+        method=method,
+        url=_safe_url(url),
+        status=resp.status_code,
+        body=snippet,
+    )
+    message = f"{resp.status_code} Client Error for url: {_safe_url(url)}"
+    if snippet:
+        message = f"{message}; response={snippet}"
+    raise requests.HTTPError(message, response=resp)
 
 
 def time_ms() -> int:
@@ -725,7 +743,6 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
     profile["name"] = name
     profile["minFormatScore"] = 10000
     profile["cutoffFormatScore"] = 0
-    profile["language"] = {"id": -1, "name": "Any"}
     profile["formatItems"] = _complete_format_items(valid_cf_ids, {
         cf_ids[fmt_name]: score
         for fmt_name, score in scores.items()
@@ -847,6 +864,7 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
     for path in target_paths:
         if path not in existing_paths:
             try:
+                _ensure_physical_media_path(path)
                 _post_json(session, f"{api}/rootfolder", app.api_key, {"path": path})
                 added += 1
             except requests.RequestException as e:
@@ -855,6 +873,21 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
             
     record("auto_config.root_folders.complete", app=app.name, added=added, target_paths=target_paths)
     return added
+
+
+def _ensure_physical_media_path(path: str) -> None:
+    """Create clean-server media subfolders before asking Arrs to add them.
+
+    Radarr/Sonarr reject root folders that do not exist inside their container.
+    The Danish Intelligence container sees the same /media bind, so creating the
+    path here makes it visible to the Arr containers without remote mappings.
+    """
+    try:
+        Path(path).mkdir(parents=True, exist_ok=True)
+        record("auto_config.root_folders.path_ready", path=path)
+    except OSError as exc:
+        record("auto_config.root_folders.path_create_failed", path=path, error=str(exc), error_type=type(exc).__name__)
+        raise requests.RequestException(f"could not create physical media path {path}: {exc}") from exc
 
 def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
     record("auto_config.download_client.begin", app=app.name, kind=app.kind)
