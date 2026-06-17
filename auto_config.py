@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlencode, urlparse, urlunparse
 
 import requests
 
@@ -258,6 +258,19 @@ def _put_json(session: requests.Session, url: str, api_key: str, payload: Any) -
 
 def _post_json(session: requests.Session, url: str, api_key: str, payload: Any) -> Any:
     return _request_json(session, "POST", url, api_key, payload=payload, timeout=30)
+
+
+def _altmount_api_key() -> str:
+    return _clean_env("ALTMOUNT_API_KEY") or _clean_env("PROXY_API_KEY")
+
+
+def _altmount_url() -> str:
+    return (_clean_env("ALTMOUNT_URL").rstrip("/") or "http://altmount:8080")
+
+
+def _altmount_api_url(path: str, api_key: str) -> str:
+    path = path if path.startswith("/") else f"/{path}"
+    return f"{_altmount_url()}/api{path}?{urlencode({'apikey': api_key})}"
 
 
 def _delete(session: requests.Session, url: str, api_key: str) -> None:
@@ -1359,6 +1372,82 @@ def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
     return 1
 
 
+def _altmount_arr_instance(app: ArrApp) -> dict[str, Any]:
+    return {
+        "name": app.name,
+        "type": app.kind.lower(),
+        "url": app.url.rstrip("/"),
+        "api_key": app.api_key,
+        "category": _altmount_download_category(app),
+        "enabled": True,
+    }
+
+
+def _safe_altmount_instance(instance: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in instance.items() if key != "api_key"}
+
+
+def _ensure_altmount_arr_management(session: requests.Session, apps: list[ArrApp]) -> int:
+    """Populate AltMount's own ARR Management instance list.
+
+    The Arrs already get an AltMount download client above. This configures the
+    opposite direction: AltMount knowing which Arr APIs it may use for media
+    synchronization, queue cleanup, and repair checks.
+    """
+    record("auto_config.altmount_arrs.begin", apps=[app.name for app in apps])
+    api_key = _altmount_api_key()
+    if not api_key:
+        record("auto_config.altmount_arrs.skip_missing_key")
+        return 0
+
+    radarr_instances = [_altmount_arr_instance(app) for app in apps if app.kind == "Radarr"]
+    sonarr_instances = [_altmount_arr_instance(app) for app in apps if app.kind == "Sonarr"]
+    if not radarr_instances and not sonarr_instances:
+        record("auto_config.altmount_arrs.skip_no_instances")
+        return 0
+
+    try:
+        response = _get_json(session, _altmount_api_url("/config", api_key), api_key)
+        config = response.get("data", response) if isinstance(response, dict) else response
+        if not isinstance(config, dict):
+            raise RuntimeError("AltMount config response did not contain an object")
+
+        arrs = config.setdefault("arrs", {})
+        before = copy.deepcopy(arrs)
+        arrs["enabled"] = True
+        arrs["webhook_base_url"] = arrs.get("webhook_base_url") or _altmount_url()
+        arrs["radarr_instances"] = radarr_instances
+        arrs["sonarr_instances"] = sonarr_instances
+        for key in ("lidarr_instances", "readarr_instances", "whisparr_instances"):
+            arrs.setdefault(key, [])
+
+        changed = arrs != before
+        if changed:
+            _put_json(session, _altmount_api_url("/config", api_key), api_key, config)
+            try:
+                _request_json(session, "POST", _altmount_api_url("/config/reload", api_key), api_key, timeout=20)
+            except requests.RequestException as exc:
+                record("auto_config.altmount_arrs.reload_failed", error=str(exc), error_type=type(exc).__name__)
+
+        try:
+            _request_json(session, "POST", _altmount_api_url("/arrs/webhook/register", api_key), api_key, timeout=30)
+            record("auto_config.altmount_arrs.webhooks_registered")
+        except requests.RequestException as exc:
+            record("auto_config.altmount_arrs.webhooks_failed", error=str(exc), error_type=type(exc).__name__)
+
+        record(
+            "auto_config.altmount_arrs.complete",
+            changed=changed,
+            radarr_instances=[_safe_altmount_instance(item) for item in radarr_instances],
+            sonarr_instances=[_safe_altmount_instance(item) for item in sonarr_instances],
+        )
+        return len(radarr_instances) + len(sonarr_instances)
+    except (requests.RequestException, RuntimeError) as exc:
+        print(f"[Core] Auto-Config: AltMount ARR Management skipped: {exc}", flush=True)
+        record("auto_config.altmount_arrs.failed", error=str(exc), error_type=type(exc).__name__)
+        return 0
+
+
 def _profile_id_by_name(session: requests.Session, app: ArrApp, profile_name: str) -> int | None:
     profiles = _get_json(session, f"{app.url}/api/v3/qualityprofile", app.api_key)
     profile = next((item for item in profiles if item.get("name") == profile_name), None)
@@ -1536,7 +1625,7 @@ def paint() -> dict[str, int]:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
     _sync_prowlarr_indexers(session, prowlarr_url, prowlarr_key)
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_servers": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_servers": 0, "altmount_arr_instances": 0}
     for app in apps:
         record("auto_config.app.begin", app=app.name, kind=app.kind, slug=app.slug, url=app.url)
         _paint_naming(session, app)
@@ -1577,6 +1666,7 @@ def paint() -> dict[str, int]:
         )
 
     _harden_prowlarr_app_sync(session, prowlarr_url, prowlarr_key)
+    totals["altmount_arr_instances"] = _ensure_altmount_arr_management(session, apps)
     time.sleep(10)
     for app in apps:
         _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
