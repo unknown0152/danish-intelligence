@@ -442,6 +442,50 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
             record("auto_config.bootstrap.register_failed", app=name, kind=kind, url=url, error=str(exc), error_type=type(exc).__name__)
 
 
+def _sync_prowlarr_indexers(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
+    """Force an initial Prowlarr application sync so fresh Arrs receive indexers."""
+    record("auto_config.prowlarr_sync.begin")
+    apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
+    wanted = {_slug(name) for name in _required_arr_app_names()}
+    changed: list[dict[str, Any]] = []
+
+    for app in apps:
+        if _slug(str(app.get("name", ""))) not in wanted:
+            continue
+        if app.get("syncLevel") != "fullSync":
+            app["syncLevel"] = "fullSync"
+            _put_json(session, f"{prowlarr_url}/api/v1/applications/{app['id']}?forceSave=true", prowlarr_key, app)
+            changed.append(app)
+
+    try:
+        command = _post_json(session, f"{prowlarr_url}/api/v1/command", prowlarr_key, {"name": "ApplicationIndexerSync"})
+    except requests.RequestException as exc:
+        record("auto_config.prowlarr_sync.command_failed", error=str(exc), error_type=type(exc).__name__)
+        print(f"[Core] Auto-Config: Prowlarr indexer sync failed to start: {exc}", flush=True)
+    else:
+        command_id = command.get("id")
+        status = str(command.get("status", "")).lower()
+        deadline = time.monotonic() + 45
+        while command_id and status not in {"completed", "failed", "aborted"} and time.monotonic() < deadline:
+            time.sleep(3)
+            try:
+                command = _get_json(session, f"{prowlarr_url}/api/v1/command/{command_id}", prowlarr_key)
+                status = str(command.get("status", "")).lower()
+            except requests.RequestException as exc:
+                record("auto_config.prowlarr_sync.poll_failed", command_id=command_id, error=str(exc), error_type=type(exc).__name__)
+                break
+        record("auto_config.prowlarr_sync.command_complete", command_id=command_id, status=status or "unknown")
+
+    for app in changed:
+        app["syncLevel"] = "addOnly"
+        try:
+            _put_json(session, f"{prowlarr_url}/api/v1/applications/{app['id']}?forceSave=true", prowlarr_key, app)
+        except requests.RequestException as exc:
+            record("auto_config.prowlarr_sync.restore_failed", app=app.get("name"), error=str(exc), error_type=type(exc).__name__)
+
+    record("auto_config.prowlarr_sync.complete", changed=len(changed))
+
+
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
     record("auto_config.discover.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
@@ -736,6 +780,23 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
         audio_profile, subtitles_profile = _danish_profile_names(app)
         _upsert_profile(session, app, profiles, audio_profile, {CF_DANISH_AUDIO: 10000, CF_DANISH_SUBTITLES: 0, **codec_scores}, cf_ids, valid_cf_ids)
         _upsert_profile(session, app, profiles, subtitles_profile, {CF_DANISH_AUDIO: 0, CF_DANISH_SUBTITLES: 10000, **codec_scores}, cf_ids, valid_cf_ids)
+        wanted_profiles = {audio_profile, subtitles_profile}
+        for profile in _get_json(session, f"{api}/qualityprofile", app.api_key):
+            profile_id = profile.get("id")
+            profile_name = str(profile.get("name", ""))
+            if profile_id is None or profile_name in wanted_profiles:
+                continue
+            try:
+                _delete(session, f"{api}/qualityprofile/{profile_id}", app.api_key)
+                record("auto_config.quality_profile.pruned", app=app.name, profile=profile_name)
+            except requests.RequestException as exc:
+                record(
+                    "auto_config.quality_profile.prune_failed",
+                    app=app.name,
+                    profile=profile_name,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
 
     result = (len(cf_ids), 2 if profiles else 0)
     record("auto_config.paint_formats.complete", app=app.name, custom_formats=result[0], profiles=result[1])
@@ -1319,6 +1380,7 @@ def paint() -> dict[str, int]:
     if not apps:
         record("auto_config.paint.no_apps")
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
+    _sync_prowlarr_indexers(session, prowlarr_url, prowlarr_key)
 
     totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_servers": 0}
     for app in apps:
