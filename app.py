@@ -26,7 +26,15 @@ from .nfo_fetch import _search_rate_limit_ok, load_indexer_configs
 # ── Handler ───────────────────────────────────────────────────────────────────
 
 ALTMOUNT_VISIBLE_ROOT = os.getenv("ALTMOUNT_VISIBLE_ROOT", "/mnt/altmount").rstrip("/")
-ALTMOUNT_URL = os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd").rstrip("?")
+
+
+def _altmount_sab_url() -> str:
+    url = os.getenv("ALTMOUNT_SABNZBD_URL") or os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd")
+    url = url.rstrip("/?")
+    return url if url.endswith("/sabnzbd") else f"{url}/sabnzbd"
+
+
+ALTMOUNT_URL = _altmount_sab_url()
 ALTMOUNT_API_KEY = os.getenv("ALTMOUNT_API_KEY") or os.getenv("ALTMOUNT_APIKEY") or ""
 ALTMOUNT_SHIM_MAX_UPLOAD_MB = int(os.getenv("ALTMOUNT_SHIM_MAX_UPLOAD_MB", "128"))
 RADARR_URL = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")

@@ -265,7 +265,13 @@ def _altmount_api_key() -> str:
 
 
 def _altmount_url() -> str:
-    return (_clean_env("ALTMOUNT_URL").rstrip("/") or "http://altmount:8080")
+    url = (
+        _clean_env("ALTMOUNT_API_BASE_URL")
+        or _clean_env("ALTMOUNT_BASE_URL")
+        or _clean_env("ALTMOUNT_URL")
+        or "http://altmount:8080"
+    ).rstrip("/")
+    return url.rsplit("/sabnzbd", 1)[0].rstrip("/")
 
 
 def _altmount_api_url(path: str, api_key: str) -> str:
@@ -1240,8 +1246,14 @@ def _ensure_physical_media_path(path: str) -> None:
     path here makes it visible to the Arr containers without remote mappings.
     """
     try:
-        Path(path).mkdir(parents=True, exist_ok=True)
-        record("auto_config.root_folders.path_ready", path=path)
+        target = Path(path)
+        target.mkdir(parents=True, exist_ok=True)
+        uid = _clean_env("PUID")
+        gid = _clean_env("PGID")
+        if uid.isdigit() and gid.isdigit():
+            os.chown(target, int(uid), int(gid))
+        target.chmod(0o2775)
+        record("auto_config.root_folders.path_ready", path=path, uid=uid if uid.isdigit() else "", gid=gid if gid.isdigit() else "")
     except OSError as exc:
         record("auto_config.root_folders.path_create_failed", path=path, error=str(exc), error_type=type(exc).__name__)
         raise requests.RequestException(f"could not create physical media path {path}: {exc}") from exc
