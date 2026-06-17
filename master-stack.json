@@ -80,7 +80,7 @@
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "true",
-                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png"
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.0/icon.png"
             },
             "volumes": [
                 {

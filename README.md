@@ -26,7 +26,7 @@ automatically configures the local Arr stack.
 Market source:
 
 ```text
-https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json
+https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.0/cosmos-market.json
 ```
 
 Image:
