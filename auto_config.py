@@ -20,6 +20,7 @@ from urllib.parse import urlparse, urlunparse
 import requests
 
 try:
+    from .diagnostics import path_state, record, safe_env
     from .tags import (
         CF_DANISH_AUDIO,
         CF_DANISH_SUBTITLES,
@@ -35,6 +36,7 @@ try:
         PROFILE_DANISH_SUBTITLES_2160P,
     )
 except ImportError:  # Allows `python3 auto_config.py` during manual debugging.
+    from diagnostics import path_state, record, safe_env
     from tags import (
         CF_DANISH_AUDIO,
         CF_DANISH_SUBTITLES,
@@ -194,27 +196,78 @@ def _truthy_env(name: str) -> bool:
 
 
 def _get_json(session: requests.Session, url: str, api_key: str) -> Any:
-    resp = session.get(url, headers=_headers(api_key), timeout=20)
-    resp.raise_for_status()
-    return resp.json()
+    return _request_json(session, "GET", url, api_key, timeout=20)
 
 
 def _put_json(session: requests.Session, url: str, api_key: str, payload: Any) -> Any:
-    resp = session.put(url, headers=_headers(api_key), json=payload, timeout=30)
-    resp.raise_for_status()
-    return resp.json() if resp.content else None
+    return _request_json(session, "PUT", url, api_key, payload=payload, timeout=30)
 
 
 def _post_json(session: requests.Session, url: str, api_key: str, payload: Any) -> Any:
-    resp = session.post(url, headers=_headers(api_key), json=payload, timeout=30)
+    return _request_json(session, "POST", url, api_key, payload=payload, timeout=30)
+
+
+def _delete(session: requests.Session, url: str, api_key: str) -> None:
+    resp = _request(session, "DELETE", url, api_key, timeout=20)
+    if resp.status_code not in (200, 202, 204, 404):
+        resp.raise_for_status()
+
+
+def _request(
+    session: requests.Session,
+    method: str,
+    url: str,
+    api_key: str,
+    payload: Any | None = None,
+    timeout: int = 20,
+) -> requests.Response:
+    started = time_ms()
+    try:
+        resp = session.request(method, url, headers=_headers(api_key), json=payload, timeout=timeout)
+        record(
+            "auto_config.http",
+            method=method,
+            url=_safe_url(url),
+            status=resp.status_code,
+            elapsed_ms=time_ms() - started,
+            api_key_set=bool(api_key),
+        )
+        return resp
+    except requests.RequestException as exc:
+        record(
+            "auto_config.http_error",
+            method=method,
+            url=_safe_url(url),
+            elapsed_ms=time_ms() - started,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            api_key_set=bool(api_key),
+        )
+        raise
+
+
+def _request_json(
+    session: requests.Session,
+    method: str,
+    url: str,
+    api_key: str,
+    payload: Any | None = None,
+    timeout: int = 20,
+) -> Any:
+    resp = _request(session, method, url, api_key, payload=payload, timeout=timeout)
     resp.raise_for_status()
     return resp.json() if resp.content else None
 
 
-def _delete(session: requests.Session, url: str, api_key: str) -> None:
-    resp = session.delete(url, headers=_headers(api_key), timeout=20)
-    if resp.status_code not in (200, 202, 204, 404):
-        resp.raise_for_status()
+def time_ms() -> int:
+    import time
+
+    return int(time.monotonic() * 1000)
+
+
+def _safe_url(url: str) -> str:
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 
 def _clean_name(name: str) -> str:
@@ -252,9 +305,16 @@ def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
 
 
 def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
+    record("auto_config.bootstrap.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     existing_names = {_slug(str(app.get("name", ""))) for app in apps}
     schemas = _get_json(session, f"{prowlarr_url}/api/v1/applications/schema", prowlarr_key)
+    record(
+        "auto_config.bootstrap.loaded",
+        existing_app_count=len(apps),
+        schema_count=len(schemas),
+        enable_2160p=_truthy_env("ENABLE_2160P_ARRS"),
+    )
 
     wanted_apps = [
         ("Radarr", "Radarr", DEFAULT_APP_URLS["Radarr"]),
@@ -273,11 +333,13 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
         api_key = _first_working_arr_key(session, kind, name, url)
         if not api_key:
             print(f"[Core] Auto-Config: {name} is not reachable yet; Prowlarr registration skipped", flush=True)
+            record("auto_config.bootstrap.skip_unreachable", app=name, kind=kind, url=url)
             continue
 
         schema = copy.deepcopy(next((item for item in schemas if _arr_kind(item) == kind), None))
         if not schema:
             print(f"[Core] Auto-Config: Prowlarr {kind} application schema unavailable; {name} skipped", flush=True)
+            record("auto_config.bootstrap.skip_schema_missing", app=name, kind=kind)
             continue
 
         schema["name"] = name
@@ -289,12 +351,15 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
         try:
             _post_json(session, f"{prowlarr_url}/api/v1/applications?forceSave=true", prowlarr_key, schema)
             print(f"[Core] Auto-Config: registered {name} in Prowlarr", flush=True)
+            record("auto_config.bootstrap.registered", app=name, kind=kind, url=url)
             existing_names.add(_slug(name))
         except requests.RequestException as exc:
             print(f"[Core] Auto-Config: failed to register {name} in Prowlarr: {exc}", flush=True)
+            record("auto_config.bootstrap.register_failed", app=name, kind=kind, url=url, error=str(exc), error_type=type(exc).__name__)
 
 
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
+    record("auto_config.discover.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     discovered: list[ArrApp] = []
     for app in apps:
@@ -307,12 +372,16 @@ def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_ke
         prowlarr_app_key = str(_field(app, "apiKey") or "")
         api_key = _first_working_arr_key(session, kind, name, url, prowlarr_app_key)
         if not api_key and url != default_url:
+            record("auto_config.discover.default_url_retry", app=name, kind=kind, configured_url=url, default_url=default_url)
             url = default_url
             api_key = _first_working_arr_key(session, kind, name, url, prowlarr_app_key)
         if not api_key:
             print(f"[Core] Auto-Config: {name} API key unavailable or unauthorized", flush=True)
+            record("auto_config.discover.skip_key_or_auth", app=name, kind=kind, url=url)
             continue
         discovered.append(ArrApp(name=name, kind=kind, slug=_slug(name), url=url.rstrip("/"), api_key=api_key))
+        record("auto_config.discover.found", app=name, kind=kind, slug=_slug(name), url=url.rstrip("/"))
+    record("auto_config.discover.complete", discovered_count=len(discovered), prowlarr_app_count=len(apps))
     return discovered
 
 
@@ -337,7 +406,9 @@ def _first_working_arr_key(session: requests.Session, kind: str, app_name: str, 
             continue
         seen.add(key)
         if _arr_reachable(session, url, key):
+            record("auto_config.arr_key.working", app=app_name, kind=kind, url=url, candidate_count=len(seen))
             return key
+    record("auto_config.arr_key.none_working", app=app_name, kind=kind, url=url, candidate_count=len(seen))
     return ""
 
 
@@ -366,8 +437,10 @@ def _read_arr_config_keys(kind: str, app_name: str = "", url: str = "") -> list[
                 api_key = root.findtext("ApiKey", default="").strip()
                 if api_key:
                     keys.append(api_key)
+                    record("auto_config.config_key.read", kind=kind, app=app_name, path=path)
             except Exception as exc:
                 print(f"[Core] Auto-Config: could not read {path}: {exc}", flush=True)
+                record("auto_config.config_key.read_failed", kind=kind, app=app_name, path=path, error=str(exc), error_type=type(exc).__name__)
     return keys
 
 
@@ -399,9 +472,12 @@ def _seerr_api_key() -> str:
 
 def _arr_reachable(session: requests.Session, url: str, api_key: str) -> bool:
     try:
-        resp = session.get(f"{url.rstrip('/')}/api/v3/system/status", headers=_headers(api_key), timeout=8)
-        return resp.ok
-    except requests.RequestException:
+        resp = _request(session, "GET", f"{url.rstrip('/')}/api/v3/system/status", api_key, timeout=8)
+        ok = resp.ok
+        record("auto_config.arr_reachable", url=url, status=resp.status_code, ok=ok)
+        return ok
+    except requests.RequestException as exc:
+        record("auto_config.arr_reachable_error", url=url, error=str(exc), error_type=type(exc).__name__)
         return False
 
 
@@ -483,6 +559,7 @@ def _managed_cf_payloads() -> list[dict[str, Any]]:
 
 
 def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple[int, int]:
+    record("auto_config.paint_formats.begin", app=app.name, kind=app.kind, url=app.url)
     api = f"{app.url}/api/v3"
     old_formats = _get_json(session, f"{api}/customformat", app.api_key)
     old_ids = [fmt["id"] for fmt in old_formats if fmt.get("name") in MANAGED_CF_NAMES or fmt.get("name") in LEGACY_CF_NAMES]
@@ -541,7 +618,9 @@ def _paint_formats_and_profiles(session: requests.Session, app: ArrApp) -> tuple
         _upsert_profile(session, app, profiles, audio_profile, {CF_DANISH_AUDIO: 10000, CF_DANISH_SUBTITLES: 0, **codec_scores}, cf_ids, valid_cf_ids)
         _upsert_profile(session, app, profiles, subtitles_profile, {CF_DANISH_AUDIO: 0, CF_DANISH_SUBTITLES: 10000, **codec_scores}, cf_ids, valid_cf_ids)
 
-    return len(cf_ids), 2 if profiles else 0
+    result = (len(cf_ids), 2 if profiles else 0)
+    record("auto_config.paint_formats.complete", app=app.name, custom_formats=result[0], profiles=result[1])
+    return result
 
 
 def _complete_format_items(valid_cf_ids: set[int], scores_by_id: dict[int, int]) -> list[dict[str, int]]:
@@ -663,6 +742,7 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
 
 
 def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: list[dict[str, Any]], prowlarr_key: str) -> int:
+    record("auto_config.rewire_indexers.begin", app=app.name, kind=app.kind, prowlarr_indexer_count=len(prowlarr_indexers))
     api = f"{app.url}/api/v3"
     by_name = {_clean_name(ix.get("name", "")): str(ix.get("id")) for ix in prowlarr_indexers}
     arr_indexers = _get_json(session, f"{api}/indexer", app.api_key)
@@ -685,10 +765,12 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
         indexer["name"] = f"{_display_name(indexer.get('name', ''))} {{DK}}"
         _put_json(session, f"{api}/indexer/{indexer['id']}?forceSave=true", app.api_key, indexer)
         linked += 1
+    record("auto_config.rewire_indexers.complete", app=app.name, linked=linked, arr_indexer_count=len(arr_indexers))
     return linked
 
 
 def _paint_naming(session: requests.Session, app: ArrApp) -> None:
+    record("auto_config.naming.begin", app=app.name, kind=app.kind)
     api = f"{app.url}/api/v3"
     naming = _get_json(session, f"{api}/config/naming", app.api_key)
     
@@ -702,18 +784,22 @@ def _paint_naming(session: requests.Session, app: ArrApp) -> None:
         naming["standardEpisodeFormat"] = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} {imdb-{ImdbId}} {tmdb-{TmdbId}} [{Quality Full}] [{Custom Formats}]"
 	        
     _put_json(session, f"{api}/config/naming?forceSave=true", app.api_key, naming)
+    record("auto_config.naming.complete", app=app.name, kind=app.kind)
 
 
 def _paint_indexer_config(session: requests.Session, app: ArrApp) -> None:
     """Whitelist proxy markers that Radarr can otherwise misread as hardcoded subs."""
+    record("auto_config.indexer_config.begin", app=app.name, kind=app.kind)
     api = f"{app.url}/api/v3"
     try:
         config = _get_json(session, f"{api}/config/indexer", app.api_key)
     except requests.RequestException as exc:
         print(f"[Core] Auto-Config: {app.name} indexer config skipped: {exc}", flush=True)
+        record("auto_config.indexer_config.skipped", app=app.name, error=str(exc), error_type=type(exc).__name__)
         return
 
     if "whitelistedHardcodedSubs" not in config:
+        record("auto_config.indexer_config.unsupported", app=app.name)
         return
 
     existing = [
@@ -735,12 +821,15 @@ def _paint_indexer_config(session: requests.Session, app: ArrApp) -> None:
             seen.add(key)
 
     new_value = ",".join(merged)
-    if new_value != config.get("whitelistedHardcodedSubs"):
+    changed = new_value != config.get("whitelistedHardcodedSubs")
+    if changed:
         config["whitelistedHardcodedSubs"] = new_value
         _put_json(session, f"{api}/config/indexer", app.api_key, config)
+    record("auto_config.indexer_config.complete", app=app.name, changed=changed)
 
 
 def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
+    record("auto_config.root_folders.begin", app=app.name, kind=app.kind)
     api = f"{app.url}/api/v3"
     existing = _get_json(session, f"{api}/rootfolder", app.api_key)
     existing_paths = {f.get("path", "").rstrip("/") for f in existing}
@@ -762,10 +851,13 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
                 added += 1
             except requests.RequestException as e:
                 print(f"[Core] Auto-Config: Failed to add root folder {path}: {e}", flush=True)
+                record("auto_config.root_folders.add_failed", app=app.name, path=path, error=str(e), error_type=type(e).__name__)
             
+    record("auto_config.root_folders.complete", app=app.name, added=added, target_paths=target_paths)
     return added
 
 def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
+    record("auto_config.download_client.begin", app=app.name, kind=app.kind)
     api = f"{app.url}/api/v3"
     clients = _get_json(session, f"{api}/downloadclient", app.api_key)
     proxy_api_key = os.getenv("PROXY_API_KEY", "")
@@ -781,10 +873,12 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
             if proxy_api_key:
                 _set_field(client, "apiKey", proxy_api_key)
             _put_json(session, f"{api}/downloadclient/{client['id']}?forceSave=true", app.api_key, client)
+            record("auto_config.download_client.updated", app=app.name, category=category, host=PROXY_HOST, port=PROXY_PORT)
             return 1
 
     if not proxy_api_key:
         print("[Core] Auto-Config: Cannot create AltMount client; PROXY_API_KEY is missing.", flush=True)
+        record("auto_config.download_client.skip_missing_proxy_key", app=app.name)
         return 0
 
     new_client = {
@@ -806,10 +900,12 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
         ]
     }
     _post_json(session, f"{api}/downloadclient?forceSave=true", app.api_key, new_client)
+    record("auto_config.download_client.created", app=app.name, category=category, host=PROXY_HOST, port=PROXY_PORT)
     return 1
 
 
 def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
+    record("auto_config.webhook.begin", app=app.name, kind=app.kind)
     api = f"{app.url}/api/v3"
     webhook_name = "Danish Intelligence Marker Preserver"
     webhook_url = f"{ARR_PROXY_URL}/arr/{app.slug}"
@@ -829,6 +925,7 @@ def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
         payload = next((schema for schema in schemas if schema.get("implementation") == "Webhook"), None)
         if not payload:
             print(f"[Core] Auto-Config: {app.name} Webhook notification schema unavailable", flush=True)
+            record("auto_config.webhook.schema_missing", app=app.name)
             return 0
 
     payload["name"] = webhook_name
@@ -872,8 +969,10 @@ def _ensure_marker_webhook(session: requests.Session, app: ArrApp) -> int:
 
     if existing:
         _put_json(session, f"{api}/notification/{payload['id']}?forceSave=true", app.api_key, payload)
+        record("auto_config.webhook.updated", app=app.name, url=webhook_url)
     else:
         _post_json(session, f"{api}/notification?forceSave=true", app.api_key, payload)
+        record("auto_config.webhook.created", app=app.name, url=webhook_url)
     return 1
 
 
@@ -935,9 +1034,11 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
     if not _truthy_env("ENABLE_2160P_ARRS") or not _is_2160p_instance(app.name, app.url):
         return 0
 
+    record("auto_config.seerr_2160p.begin", app=app.name, kind=app.kind)
     seerr_key = _seerr_api_key()
     if not seerr_key:
         print("[Core] Auto-Config: Seerr API key unavailable; 2160p Seerr entries skipped", flush=True)
+        record("auto_config.seerr_2160p.skip_missing_key", app=app.name)
         return 0
 
     seerr_url = os.getenv("SEERR_URL", "http://seerr:5055").rstrip("/")
@@ -953,6 +1054,7 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
         existing = _get_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key)
     except requests.RequestException as exc:
         print(f"[Core] Auto-Config: Seerr {endpoint} settings unavailable; 2160p entries skipped: {exc}", flush=True)
+        record("auto_config.seerr_2160p.settings_failed", app=app.name, endpoint=endpoint, error=str(exc), error_type=type(exc).__name__)
         return 0
 
     changed = 0
@@ -960,6 +1062,7 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
         profile_id = _profile_id_by_name(session, app, profile_name)
         if profile_id is None:
             print(f"[Core] Auto-Config: {app.name} profile {profile_name} unavailable; Seerr entry skipped", flush=True)
+            record("auto_config.seerr_2160p.profile_missing", app=app.name, profile=profile_name)
             continue
 
         payload = _seerr_base_payload(app, profile_name, profile_id, root_path, is_default)
@@ -981,11 +1084,14 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
             changed += 1
         except requests.RequestException as exc:
             print(f"[Core] Auto-Config: failed to upsert Seerr {payload['name']}: {exc}", flush=True)
+            record("auto_config.seerr_2160p.upsert_failed", app=app.name, name=payload["name"], error=str(exc), error_type=type(exc).__name__)
 
+    record("auto_config.seerr_2160p.complete", app=app.name, changed=changed)
     return changed
 
 
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
+    record("auto_config.prowlarr_sync.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     for app in apps:
         name = app.get("name", "")
@@ -1000,25 +1106,58 @@ def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prow
         _put_json(session, f"{prowlarr_url}/api/v1/applications/{app['id']}?forceSave=true", prowlarr_key, app)
     try:
         _post_json(session, f"{prowlarr_url}/api/v1/command", prowlarr_key, {"name": "ApplicationIndexerSync", "forceSync": True})
+        record("auto_config.prowlarr_sync.command_sent")
     except requests.RequestException as exc:
         print(f"[Core] Auto-Config: Prowlarr sync command skipped: {exc}", flush=True)
+        record("auto_config.prowlarr_sync.command_skipped", error=str(exc), error_type=type(exc).__name__)
 
 
 def paint() -> dict[str, int]:
     prowlarr_url = os.getenv("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
+    record(
+        "auto_config.paint.begin",
+        prowlarr_url=prowlarr_url,
+        env=safe_env([
+            "PROWLARR_URL",
+            "PROWLARR_API_KEY",
+            "PROXY_URL",
+            "ARR_PROXY_URL",
+            "RADARR_URL",
+            "SONARR_URL",
+            "RADARR_2160P_URL",
+            "SONARR_2160P_URL",
+            "SEERR_URL",
+            "ENABLE_2160P_ARRS",
+            "PROXY_API_KEY",
+        ]),
+        paths=path_state([
+            "/arr-config/prowlarr/config.xml",
+            "/arr-config/radarr/config.xml",
+            "/arr-config/sonarr/config.xml",
+            "/arr-config/radarr-2160p/config.xml",
+            "/arr-config/sonarr-2160p/config.xml",
+            "/seerr-config/settings.json",
+            "/media",
+            "/mnt",
+        ]),
+    )
     prowlarr_key = _prowlarr_api_key()
     if not prowlarr_key:
+        record("auto_config.paint.missing_prowlarr_key")
         raise RuntimeError("Prowlarr API key is not set and no mounted Prowlarr config.xml was found")
 
     session = requests.Session()
     _bootstrap_arr_apps(session, prowlarr_url, prowlarr_key)
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
+    record("auto_config.paint.indexers_loaded", count=len(prowlarr_indexers))
     apps = _discover_arr_apps(session, prowlarr_url, prowlarr_key)
     if not apps:
+        record("auto_config.paint.no_apps")
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
 
     totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_servers": 0}
     for app in apps:
+        record("auto_config.app.begin", app=app.name, kind=app.kind, slug=app.slug, url=app.url)
         _paint_naming(session, app)
         _paint_indexer_config(session, app)
         root_folders = _ensure_root_folders(session, app)
@@ -1043,6 +1182,19 @@ def paint() -> dict[str, int]:
             f"created {root_folders} root folders",
             flush=True,
         )
+        record(
+            "auto_config.app.complete",
+            app=app.name,
+            kind=app.kind,
+            root_folders=root_folders,
+            custom_formats=cf_count,
+            profiles=profile_count,
+            linked_indexers=linked,
+            download_clients=download_clients,
+            webhooks=webhooks,
+            seerr_servers=seerr_servers,
+        )
 
     _harden_prowlarr_app_sync(session, prowlarr_url, prowlarr_key)
+    record("auto_config.paint.complete", totals=totals)
     return totals

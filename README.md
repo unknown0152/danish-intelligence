@@ -26,7 +26,7 @@ automatically configures the local Arr stack.
 Market source:
 
 ```text
-https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.1/cosmos-market.json
+https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/cosmos-market.json
 ```
 
 Image:
@@ -198,6 +198,25 @@ Setup status endpoint:
 ```bash
 docker exec danish-intelligence python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9699/status.json').read().decode())"
 ```
+
+Install diagnostics are enabled by default in the Cosmos manifests. They are
+redacted and persist in the Danish Intelligence config volume:
+
+```text
+/config/install-debug.jsonl
+/config/install-debug-latest.json
+```
+
+Inside the running container, the same recent events are available at:
+
+```text
+http://danish-intelligence:9699/debug/install
+```
+
+The diagnostics capture environment placeholder state, mounted config/media
+paths, Docker DNS resolution, API reachability, Prowlarr app discovery, and each
+auto-config paint stage. API keys, tokens, passwords, and RID values are
+redacted.
 
 ## Troubleshooting
 

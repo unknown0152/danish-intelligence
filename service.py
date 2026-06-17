@@ -44,6 +44,7 @@ from danish_intelligence.hunt import _handle_learn_imported
 from danish_intelligence.marker_preserver import handle_arr_webhook
 from danish_intelligence.autopilot import run_autopilot
 from danish_intelligence.auto_config import paint as paint_auto_config
+from danish_intelligence.diagnostics import dns_state, path_state, record, safe_env, summary as diagnostics_summary
 
 handle = main_proxy.handle
 proxy_startup = main_proxy.on_startup
@@ -90,10 +91,12 @@ def _read_config_key(app_name: str) -> str:
 def ensure_prowlarr_api_key() -> bool:
     key = _clean_env("PROWLARR_API_KEY") or _clean_env("PROWLARR_APIKEY") or _read_config_key("prowlarr")
     if not key:
+        record("prowlarr_key.missing")
         return False
 
     os.environ["PROWLARR_API_KEY"] = key
     main_proxy.PROWLARR_API_KEY = key
+    record("prowlarr_key.discovered", source="env_or_config")
     return True
 
 
@@ -114,9 +117,11 @@ def ensure_proxy_api_key():
             key_path.chmod(0o600)
         os.environ["PROXY_API_KEY"] = key
         print("[Core] Generated fallback PROXY_API_KEY for OldBoys proxy", flush=True)
+        record("proxy_key.ready", persisted=True)
     except Exception as e:
         os.environ["PROXY_API_KEY"] = secrets.token_urlsafe(32)
         print(f"[Core] Generated ephemeral PROXY_API_KEY fallback: {e}", flush=True)
+        record("proxy_key.ephemeral", error=str(e))
 
 async def autopilot_loop():
     """Background task for DanskArr autopilot."""
@@ -133,17 +138,21 @@ async def autopilot_loop():
 async def auto_config_painter():
     """Paint CFs, profiles, and proxy URLs through Servarr HTTP APIs."""
     print("[Core] Auto-Config: Waiting for Arrs to be ready...", flush=True)
+    record("auto_config.waiting", delay_seconds=30)
     await asyncio.sleep(30) # Give Arrs time to start
     
     try:
         _APP_STATE["auto_config"] = {"status": "running", "result": None, "error": None}
         print("[Core] Auto-Config: Painting Custom Formats and Profiles...", flush=True)
+        record("auto_config.started")
         totals = await asyncio.to_thread(paint_auto_config)
         _APP_STATE["auto_config"] = {"status": "success", "result": totals, "error": None}
         print(f"[Core] Auto-Config: SUCCESS. {totals}", flush=True)
+        record("auto_config.success", totals=totals)
     except Exception as e:
         _APP_STATE["auto_config"] = {"status": "failed", "result": None, "error": str(e)}
         print(f"[Core] Auto-Config: Critical Error: {e}", flush=True)
+        record("auto_config.failed", error=str(e), error_type=type(e).__name__)
 
 
 _APP_STATE = {
@@ -154,12 +163,59 @@ _APP_STATE = {
 
 async def on_startup(app):
     print("[Core] Running startup sequence...", flush=True)
+    record(
+        "startup.begin",
+        env=safe_env([
+            "PROWLARR_URL",
+            "PROWLARR_API_KEY",
+            "PROXY_URL",
+            "ARR_PROXY_URL",
+            "RADARR_URL",
+            "SONARR_URL",
+            "RADARR_2160P_URL",
+            "SONARR_2160P_URL",
+            "SEERR_URL",
+            "MEDIA_SERVER_TYPE",
+            "MEDIA_SERVER_URL",
+            "ALTMOUNT_URL",
+            "ENABLE_2160P_ARRS",
+            "PUID",
+            "PGID",
+        ]),
+        paths=path_state([
+            "/config",
+            "/arr-config/prowlarr",
+            "/arr-config/prowlarr/config.xml",
+            "/arr-config/radarr",
+            "/arr-config/radarr/config.xml",
+            "/arr-config/sonarr",
+            "/arr-config/sonarr/config.xml",
+            "/arr-config/radarr-2160p",
+            "/arr-config/radarr-2160p/config.xml",
+            "/arr-config/sonarr-2160p",
+            "/arr-config/sonarr-2160p/config.xml",
+            "/seerr-config",
+            "/media",
+            "/mnt",
+        ]),
+        dns=dns_state({
+            "prowlarr": os.getenv("PROWLARR_URL", "http://prowlarr:9696"),
+            "radarr": os.getenv("RADARR_URL", "http://radarr:7878"),
+            "sonarr": os.getenv("SONARR_URL", "http://sonarr:8989"),
+            "radarr-2160p": os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7878"),
+            "sonarr-2160p": os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8989"),
+            "seerr": os.getenv("SEERR_URL", "http://seerr:5055"),
+            "altmount": os.getenv("ALTMOUNT_URL", "http://altmount:8080/sabnzbd"),
+            "danish-intelligence": os.getenv("PROXY_URL", "http://danish-intelligence:9699"),
+        }),
+    )
     ensure_proxy_api_key()
     _APP_STATE["prowlarr_key_discovered"] = ensure_prowlarr_api_key()
     
     # Init modular proxy
     await proxy_startup(app)
     print("[Core] Danish Intelligence modular core initialized", flush=True)
+    record("startup.proxy_initialized")
     
     # Init OldBoys
     try:
@@ -180,19 +236,23 @@ async def on_startup(app):
             app['oldboys_enabled'] = True
             _APP_STATE["oldboys"] = {"enabled": True, "configured": True, "error": None}
             print("[Core] OldBoys components initialized", flush=True)
+            record("oldboys.ready", enabled=True)
         else:
             app['oldboys_enabled'] = False
             _APP_STATE["oldboys"] = {"enabled": False, "configured": False, "error": None}
             print("[Core] OldBoys credentials not set; OldBoys features disabled.", flush=True)
+            record("oldboys.disabled", reason="missing_credentials")
     except Exception as e:
         app['oldboys_enabled'] = False
         _APP_STATE["oldboys"] = {"enabled": False, "configured": False, "error": str(e)}
         print(f"[Core] Error initializing OldBoys: {e}", flush=True)
+        record("oldboys.failed", error=str(e), error_type=type(e).__name__)
 
     # Start background tasks
     app['autopilot_task'] = asyncio.create_task(autopilot_loop())
     app['autoconfig_task'] = asyncio.create_task(auto_config_painter())
     print("[Core] Startup sequence complete.", flush=True)
+    record("startup.complete")
 
 async def on_cleanup(app):
     print("[Core] Running cleanup sequence...", flush=True)
@@ -321,6 +381,14 @@ async def handle_status(request: web.Request) -> web.Response:
     return web.Response(text=_status_html(payload), content_type="text/html")
 
 
+async def handle_install_debug(request: web.Request) -> web.Response:
+    try:
+        limit = int(request.query.get("limit", "120"))
+    except ValueError:
+        limit = 120
+    return web.json_response(diagnostics_summary(max(1, min(limit, 400))))
+
+
 async def handle_radarr_webhook(request: web.Request) -> web.Response:
     return await handle_arr_webhook(request, "radarr")
 
@@ -344,6 +412,7 @@ async def main():
     app.router.add_get("/health", lambda r: web.json_response({"status": "ok", "service": "danish-intelligence"}))
     app.router.add_get("/status", handle_status)
     app.router.add_get("/status.json", handle_status_json)
+    app.router.add_get("/debug/install", handle_install_debug)
     app.router.add_get("/ob/api", ob_server.handle_api)
     app.router.add_get("/ob/health", ob_server.handle_health)
 

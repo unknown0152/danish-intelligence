@@ -74,13 +74,16 @@
                 "MEDIA_SERVER_TYPE=plex",
                 "MEDIA_SERVER_URL=http://plex:32400",
                 "ENABLE_2160P_ARRS={Context.Enable2160p}",
+                "INSTALL_DEBUG=1",
+                "INSTALL_DEBUG_FILE=/config/install-debug.jsonl",
+                "INSTALL_DEBUG_SNAPSHOT=/config/install-debug-latest.json",
                 "LISTEN_PORT=9699",
                 "LISTEN_HOST=0.0.0.0"
             ],
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "true",
-                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.1/icon.png"
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/icon.png"
             },
             "volumes": [
                 {
