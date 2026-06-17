@@ -44,6 +44,7 @@
                 "PORT=8080",
                 "LOG_LEVEL=warn",
                 "JWT_SECRET={Context.JWTSecret}",
+                "ALTMOUNT_AUTH_LOGIN_REQUIRED=false",
                 "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
                 "ALTMOUNT_SABNZBD_COMPLETE_DIR=/complete",
                 "ALTMOUNT_ENABLE_SABNZBD=true",
