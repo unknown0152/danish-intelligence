@@ -354,6 +354,79 @@ def _display_name(name: str) -> str:
     return name.strip()
 
 
+RADARR_INDEXER_CATEGORIES = [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 2070, 2080, 2090]
+SONARR_INDEXER_CATEGORIES = [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090, 5070]
+
+
+def _capability_category_ids(indexer: dict[str, Any]) -> set[int]:
+    ids: set[int] = set()
+
+    def visit(categories: list[dict[str, Any]]) -> None:
+        for category in categories:
+            try:
+                ids.add(int(category.get("id")))
+            except (TypeError, ValueError):
+                pass
+            visit(category.get("subCategories") or [])
+
+    capabilities = indexer.get("capabilities") or {}
+    visit(capabilities.get("categories") or [])
+    return ids
+
+
+def _indexer_target_categories(indexer: dict[str, Any], app: ArrApp) -> tuple[list[int], list[int]]:
+    available = _capability_category_ids(indexer)
+    if app.kind == "Radarr":
+        categories = [cat for cat in RADARR_INDEXER_CATEGORIES if cat in available]
+        return categories, []
+    categories = [cat for cat in SONARR_INDEXER_CATEGORIES if cat in available]
+    anime = [5070] if 5070 in available else []
+    return categories, anime
+
+
+def _managed_prowlarr_targets(prowlarr_indexers: list[dict[str, Any]], app: ArrApp) -> dict[str, dict[str, Any]]:
+    targets: dict[str, dict[str, Any]] = {}
+    for indexer in prowlarr_indexers:
+        if not indexer.get("enable", True):
+            continue
+        if str(indexer.get("implementation", "")).lower() != "newznab":
+            continue
+        name = str(indexer.get("name", ""))
+        if "{dk}" not in name.lower():
+            continue
+        clean_name = _clean_name(name)
+        if not clean_name:
+            continue
+        categories, anime_categories = _indexer_target_categories(indexer, app)
+        targets[clean_name] = {
+            "id": str(indexer.get("id")),
+            "name": f"{_display_name(name)} {{DK}}",
+            "categories": categories,
+            "animeCategories": anime_categories,
+        }
+    return targets
+
+
+def _newznab_schema(session: requests.Session, app: ArrApp) -> dict[str, Any] | None:
+    schemas = _get_json(session, f"{app.url}/api/v3/indexer/schema", app.api_key)
+    schema = next((item for item in schemas if item.get("implementation") == "Newznab"), None)
+    return copy.deepcopy(schema) if schema else None
+
+
+def _set_indexer_target_fields(indexer: dict[str, Any], app: ArrApp, target: dict[str, Any], prowlarr_key: str) -> None:
+    _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/{app.slug}/{target['id']}")
+    _set_field(indexer, "apiKey", prowlarr_key)
+    if target["categories"]:
+        _set_field(indexer, "categories", target["categories"])
+    if app.kind == "Sonarr":
+        _set_field(indexer, "animeCategories", target["animeCategories"])
+    indexer["name"] = target["name"]
+    indexer["enableRss"] = True
+    indexer["enableAutomaticSearch"] = True
+    indexer["enableInteractiveSearch"] = True
+    indexer["priority"] = max(1, int(indexer.get("priority") or 25))
+
+
 def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
     implementation = str(client.get("implementation", "")).lower()
     if implementation != "sabnzbd":
@@ -951,28 +1024,55 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
 def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: list[dict[str, Any]], prowlarr_key: str) -> int:
     record("auto_config.rewire_indexers.begin", app=app.name, kind=app.kind, prowlarr_indexer_count=len(prowlarr_indexers))
     api = f"{app.url}/api/v3"
-    by_name = {_clean_name(ix.get("name", "")): str(ix.get("id")) for ix in prowlarr_indexers}
+    targets = _managed_prowlarr_targets(prowlarr_indexers, app)
     arr_indexers = _get_json(session, f"{api}/indexer", app.api_key)
-    dk_names = {
-        _clean_name(indexer.get("name", ""))
-        for indexer in arr_indexers
-        if "{dk}" in str(indexer.get("name", "")).lower()
-    }
-    linked = 0
+
+    by_clean_name: dict[str, list[dict[str, Any]]] = {}
     for indexer in arr_indexers:
         base_name = _clean_name(indexer.get("name", ""))
-        if base_name in dk_names and "{dk}" not in str(indexer.get("name", "")).lower():
-            continue
+        if base_name in targets:
+            by_clean_name.setdefault(base_name, []).append(indexer)
 
-        prowlarr_id = by_name.get(base_name)
-        if not prowlarr_id:
-            continue
-        _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/{app.slug}/{prowlarr_id}")
-        _set_field(indexer, "apiKey", prowlarr_key)
-        indexer["name"] = f"{_display_name(indexer.get('name', ''))} {{DK}}"
-        _put_json(session, f"{api}/indexer/{indexer['id']}?forceSave=true", app.api_key, indexer)
+    schema: dict[str, Any] | None = None
+    linked = 0
+    created = 0
+    deleted = 0
+
+    for clean_name, target in targets.items():
+        candidates = by_clean_name.get(clean_name, [])
+        if candidates:
+            target_url = f"{ARR_PROXY_URL}/{app.slug}/{target['id']}"
+            candidates.sort(key=lambda indexer: (
+                str(_field(indexer, "baseUrl", "")).rstrip("/") != target_url,
+                "(prowlarr)" in str(indexer.get("name", "")).lower(),
+                int(indexer.get("id") or 0),
+            ))
+            canonical = candidates[0]
+            _set_indexer_target_fields(canonical, app, target, prowlarr_key)
+            _put_json(session, f"{api}/indexer/{canonical['id']}?forceSave=true", app.api_key, canonical)
+            for duplicate in candidates[1:]:
+                _delete(session, f"{api}/indexer/{duplicate['id']}", app.api_key)
+                deleted += 1
+        else:
+            schema = schema or _newznab_schema(session, app)
+            if not schema:
+                record("auto_config.rewire_indexers.schema_missing", app=app.name, target=target["name"])
+                continue
+            canonical = copy.deepcopy(schema)
+            canonical.pop("id", None)
+            _set_indexer_target_fields(canonical, app, target, prowlarr_key)
+            _post_json(session, f"{api}/indexer?forceSave=true", app.api_key, canonical)
+            created += 1
         linked += 1
-    record("auto_config.rewire_indexers.complete", app=app.name, linked=linked, arr_indexer_count=len(arr_indexers))
+    record(
+        "auto_config.rewire_indexers.complete",
+        app=app.name,
+        linked=linked,
+        created=created,
+        deleted=deleted,
+        arr_indexer_count=len(arr_indexers),
+        target_count=len(targets),
+    )
     return linked
 
 
@@ -1422,5 +1522,8 @@ def paint() -> dict[str, int]:
         )
 
     _harden_prowlarr_app_sync(session, prowlarr_url, prowlarr_key)
+    time.sleep(10)
+    for app in apps:
+        _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
     record("auto_config.paint.complete", totals=totals)
     return totals
