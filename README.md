@@ -77,8 +77,11 @@ The container expects Docker DNS names for the media stack:
 - `http://danish-intelligence:9699`
 - `http://altmount:8080` when AltMount is installed
 
-In Cosmos this is handled by attaching the service to the shared `media-stack`
-network.
+In Cosmos this is handled by the market manifests creating the shared
+`media-stack` bridge network and attaching every stack service to it. The
+network uses Docker's normal IPAM allocation instead of a fixed subnet, so fresh
+servers do not need a pre-created network and avoid subnet collisions with
+existing Docker networks.
 
 ## Auto-Configured Arr Objects
 

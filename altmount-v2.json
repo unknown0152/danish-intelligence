@@ -117,5 +117,12 @@
                 }
             }
         }
+    },
+    "networks": {
+        "media-stack": {
+            "name": "media-stack",
+            "driver": "bridge",
+            "attachable": true
+        }
     }
 }
