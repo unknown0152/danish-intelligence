@@ -1320,8 +1320,9 @@ def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
 
 
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
-    record("auto_config.prowlarr_sync.begin", prowlarr_url=prowlarr_url)
+    record("auto_config.prowlarr_app_harden.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
+    changed = 0
     for app in apps:
         name = app.get("name", "")
         kind = _arr_kind(app)
@@ -1333,12 +1334,8 @@ def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prow
         if isinstance(sync_categories, list):
             _set_field(app, "syncCategories", [cat for cat in sync_categories if cat not in drop])
         _put_json(session, f"{prowlarr_url}/api/v1/applications/{app['id']}?forceSave=true", prowlarr_key, app)
-    try:
-        _post_json(session, f"{prowlarr_url}/api/v1/command", prowlarr_key, {"name": "ApplicationIndexerSync", "forceSync": True})
-        record("auto_config.prowlarr_sync.command_sent")
-    except requests.RequestException as exc:
-        print(f"[Core] Auto-Config: Prowlarr sync command skipped: {exc}", flush=True)
-        record("auto_config.prowlarr_sync.command_skipped", error=str(exc), error_type=type(exc).__name__)
+        changed += 1
+    record("auto_config.prowlarr_app_harden.complete", changed=changed)
 
 
 def paint() -> dict[str, int]:
