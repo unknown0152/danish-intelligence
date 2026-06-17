@@ -204,6 +204,9 @@
                     "type": "bind",
                     "bind": {
                         "propagation": "rshared"
+                    },
+                    "BindOptions": {
+                        "Propagation": "rshared"
                     }
                 }
             ],
@@ -247,6 +250,9 @@
                     "type": "bind",
                     "bind": {
                         "propagation": "rshared"
+                    },
+                    "BindOptions": {
+                        "Propagation": "rshared"
                     }
                 }
             ],
@@ -311,6 +317,9 @@
                     "type": "bind",
                     "bind": {
                         "propagation": "rshared"
+                    },
+                    "BindOptions": {
+                        "Propagation": "rshared"
                     }
                 }
             ],
@@ -348,6 +357,9 @@
                     "type": "bind",
                     "bind": {
                         "propagation": "rshared"
+                    },
+                    "BindOptions": {
+                        "Propagation": "rshared"
                     }
                 }
             ],
