@@ -1030,6 +1030,8 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
             _set_field(client, "useSsl", PROXY_USE_SSL)
             _set_field(client, "urlBase", "/altmount")
             _set_field(client, "movieCategory" if app.kind == "Radarr" else "tvCategory", category)
+            _set_field(client, "recentMoviePriority" if app.kind == "Radarr" else "recentTvPriority", 1)
+            _set_field(client, "olderMoviePriority" if app.kind == "Radarr" else "olderTvPriority", 1)
             if proxy_api_key:
                 _set_field(client, "apiKey", proxy_api_key)
             _put_json(session, f"{api}/downloadclient/{client['id']}?forceSave=true", app.api_key, client)
@@ -1055,8 +1057,8 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
             {"name": "username", "value": ""},
             {"name": "password", "value": ""},
             {"name": "movieCategory" if app.kind == "Radarr" else "tvCategory", "value": category},
-            {"name": "recentMoviePriority" if app.kind == "Radarr" else "recentTvPriority", "value": 0},
-            {"name": "olderMoviePriority" if app.kind == "Radarr" else "olderTvPriority", "value": 0}
+            {"name": "recentMoviePriority" if app.kind == "Radarr" else "recentTvPriority", "value": 1},
+            {"name": "olderMoviePriority" if app.kind == "Radarr" else "olderTvPriority", "value": 1}
         ]
     }
     _post_json(session, f"{api}/downloadclient?forceSave=true", app.api_key, new_client)
