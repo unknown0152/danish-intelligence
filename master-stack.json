@@ -82,7 +82,7 @@
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "true",
-                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.5/icon.png"
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.6/icon.png"
             },
             "volumes": [
                 {
@@ -290,16 +290,6 @@
                     "type": "bind"
                 }
             ],
-            "healthcheck": {
-                "test": [
-                    "CMD-SHELL",
-                    "wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/settings/public || exit 1"
-                ],
-                "start_period": 20,
-                "timeout": 3,
-                "interval": 15,
-                "retries": 3
-            },
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "true",

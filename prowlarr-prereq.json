@@ -47,15 +47,6 @@
                     "type": "bind"
                 }
             ],
-            "healthcheck": {
-                "test": [
-                    "CMD-SHELL",
-                    "curl -fsS http://localhost:9696/ping || wget -qO- http://localhost:9696/ping || exit 1"
-                ],
-                "interval": 30,
-                "timeout": 10,
-                "retries": 10
-            },
             "networks": {
                 "media-stack": {
                     "aliases": [
