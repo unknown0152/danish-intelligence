@@ -398,9 +398,17 @@ def _managed_prowlarr_targets(prowlarr_indexers: list[dict[str, Any]], app: ArrA
         if not clean_name:
             continue
         categories, anime_categories = _indexer_target_categories(indexer, app)
+        if clean_name == "oldboys":
+            base_url = f"{ARR_PROXY_URL}/ob"
+            api_key = _clean_env("PROXY_API_KEY")
+        else:
+            base_url = f"{ARR_PROXY_URL}/{app.slug}/{indexer.get('id')}"
+            api_key = ""
         targets[clean_name] = {
             "id": str(indexer.get("id")),
             "name": f"{_display_name(name)} {{DK}}",
+            "baseUrl": base_url,
+            "apiKey": api_key,
             "categories": categories,
             "animeCategories": anime_categories,
         }
@@ -414,8 +422,8 @@ def _newznab_schema(session: requests.Session, app: ArrApp) -> dict[str, Any] | 
 
 
 def _set_indexer_target_fields(indexer: dict[str, Any], app: ArrApp, target: dict[str, Any], prowlarr_key: str) -> None:
-    _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/{app.slug}/{target['id']}")
-    _set_field(indexer, "apiKey", prowlarr_key)
+    _set_field(indexer, "baseUrl", target["baseUrl"])
+    _set_field(indexer, "apiKey", target.get("apiKey") or prowlarr_key)
     if target["categories"]:
         _set_field(indexer, "categories", target["categories"])
     if app.kind == "Sonarr":
@@ -1041,7 +1049,7 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
     for clean_name, target in targets.items():
         candidates = by_clean_name.get(clean_name, [])
         if candidates:
-            target_url = f"{ARR_PROXY_URL}/{app.slug}/{target['id']}"
+            target_url = target["baseUrl"].rstrip("/")
             candidates.sort(key=lambda indexer: (
                 str(_field(indexer, "baseUrl", "")).rstrip("/") != target_url,
                 "(prowlarr)" in str(indexer.get("name", "")).lower(),
@@ -1061,8 +1069,18 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
             canonical = copy.deepcopy(schema)
             canonical.pop("id", None)
             _set_indexer_target_fields(canonical, app, target, prowlarr_key)
-            _post_json(session, f"{api}/indexer?forceSave=true", app.api_key, canonical)
-            created += 1
+            try:
+                _post_json(session, f"{api}/indexer?forceSave=true", app.api_key, canonical)
+                created += 1
+            except requests.RequestException as exc:
+                record(
+                    "auto_config.rewire_indexers.create_failed",
+                    app=app.name,
+                    target=target["name"],
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                continue
         linked += 1
     record(
         "auto_config.rewire_indexers.complete",
