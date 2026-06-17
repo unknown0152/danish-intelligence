@@ -720,27 +720,75 @@ def _quality_id(item: dict[str, Any]) -> int | None:
     return None
 
 
-def _force_2160p_quality_items(profile: dict[str, Any]) -> None:
-    cutoff = None
+def _quality_or_group_id(item: dict[str, Any]) -> int | None:
+    quality_group = item.get("qualityGroup") or {}
+    if quality_group.get("id") is not None:
+        return int(quality_group["id"])
+    return _quality_id(item)
+
+
+def _allowed_cutoff_ids(profile: dict[str, Any]) -> list[int]:
+    ids: list[int] = []
+    child_ids: list[int] = []
     for item in profile.get("items", []):
         if not isinstance(item, dict):
             continue
-        allowed = "2160" in _quality_name(item).lower()
-        item["allowed"] = allowed
-        if allowed:
-            quality_id = _quality_id(item)
-            if quality_id is not None:
-                cutoff = quality_id
+        if item.get("allowed"):
+            cutoff_id = _quality_or_group_id(item)
+            if cutoff_id is not None:
+                ids.append(cutoff_id)
         for child in item.get("items", []):
-            if not isinstance(child, dict):
+            if not isinstance(child, dict) or not child.get("allowed"):
                 continue
-            child_allowed = "2160" in _quality_name(child).lower()
-            child["allowed"] = child_allowed
-            child_id = _quality_id(child)
-            if child_allowed and child_id is not None:
-                cutoff = child_id
-    if cutoff is not None:
-        profile["cutoff"] = cutoff
+            cutoff_id = _quality_or_group_id(child)
+            if cutoff_id is not None:
+                child_ids.append(cutoff_id)
+    return ids or child_ids
+
+
+def _set_profile_cutoff_to_allowed(profile: dict[str, Any]) -> None:
+    allowed_ids = _allowed_cutoff_ids(profile)
+    if allowed_ids:
+        profile["cutoff"] = allowed_ids[-1]
+
+
+def _force_2160p_quality_items(profile: dict[str, Any]) -> None:
+    for item in profile.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        children = [child for child in item.get("items", []) if isinstance(child, dict)]
+        if children:
+            child_allowed = []
+            for child in children:
+                child["allowed"] = "2160" in _quality_name(child).lower()
+                child_allowed.append(child["allowed"])
+            item["allowed"] = any(child_allowed)
+            continue
+        item["allowed"] = "2160" in _quality_name(item).lower()
+    _set_profile_cutoff_to_allowed(profile)
+
+
+def _force_normal_quality_items(profile: dict[str, Any]) -> None:
+    """Allow sane fallback qualities for normal Arr profiles.
+
+    Older Danish releases often only exist as DVD/DVD-R or 720p. Keep obvious
+    bad/ambiguous qualities disabled, but allow Radarr/Sonarr to grab a valid
+    Danish release now and upgrade later if a higher quality appears.
+    """
+    for item in profile.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        children = [child for child in item.get("items", []) if isinstance(child, dict)]
+        if children:
+            child_allowed = []
+            for child in children:
+                allowed = _normal_profile_quality_allowed(_quality_name(child))
+                child["allowed"] = allowed
+                child_allowed.append(allowed)
+            item["allowed"] = any(child_allowed)
+        else:
+            item["allowed"] = _normal_profile_quality_allowed(_quality_name(item))
+    _set_profile_cutoff_to_allowed(profile)
 
 
 _NORMAL_PROFILE_BLOCKED_QUALITIES = {
@@ -765,28 +813,6 @@ def _normal_profile_quality_allowed(name: str) -> bool:
     if lower in {"dvd", "dvd-r"}:
         return True
     return any(resolution in lower for resolution in ("720p", "1080p", "2160p"))
-
-
-def _force_normal_quality_items(profile: dict[str, Any]) -> None:
-    """Allow sane fallback qualities for normal Arr profiles.
-
-    Older Danish releases often only exist as DVD/DVD-R or 720p. Keep obvious
-    bad/ambiguous qualities disabled, but allow Radarr/Sonarr to grab a valid
-    Danish release now and upgrade later if a higher quality appears.
-    """
-    for item in profile.get("items", []):
-        if not isinstance(item, dict):
-            continue
-        children = [child for child in item.get("items", []) if isinstance(child, dict)]
-        if children:
-            child_allowed = []
-            for child in children:
-                allowed = _normal_profile_quality_allowed(_quality_name(child))
-                child["allowed"] = allowed
-                child_allowed.append(allowed)
-            item["allowed"] = any(child_allowed)
-        else:
-            item["allowed"] = _normal_profile_quality_allowed(_quality_name(item))
 
 
 def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[str, Any]], name: str, scores: dict[str, int], cf_ids: dict[str, int], valid_cf_ids: set[int]) -> None:

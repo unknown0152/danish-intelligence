@@ -195,7 +195,10 @@ for name, (base_url, cfg, status_path) in APPS.items():
     status, data = get_json(base_url.rstrip("/") + status_path, key) if key else ("no-key", {})
     version = data.get("version") if isinstance(data, dict) else None
     app_name = data.get("appName") if isinstance(data, dict) else None
-    print(f"{name}: url={base_url} config={cfg_status} config_port={config_port or '-'} key_present={bool(key)} http_status={status} app={app_name or '-'} version={version or '-'}")
+    config_port = config_port or "<none>"
+    app_name = app_name or "<none>"
+    version = version or "<none>"
+    print(f"{name}: url={base_url} config={cfg_status} config_port={config_port} key_present={bool(key)} http_status={status} app={app_name} version={version}")
 
 prowlarr_key = keys.get("prowlarr", "")
 if prowlarr_key:
@@ -204,7 +207,11 @@ if prowlarr_key:
     if isinstance(apps, list):
         for app in apps:
             fields = {field.get("name"): field.get("value") for field in app.get("fields", []) if isinstance(field, dict)}
-            print(f"- name={app.get('name')} implementation={app.get('implementation')} syncLevel={app.get('syncLevel')} baseUrl={fields.get('baseUrl')}")
+            app_name = app.get("name")
+            implementation = app.get("implementation")
+            sync_level = app.get("syncLevel")
+            base_url = fields.get("baseUrl")
+            print(f"- name={app_name} implementation={implementation} syncLevel={sync_level} baseUrl={base_url}")
 
 for name in ("radarr", "sonarr", "radarr-2160p", "sonarr-2160p"):
     key = keys.get(name, "")
@@ -216,7 +223,14 @@ for name in ("radarr", "sonarr", "radarr-2160p", "sonarr-2160p"):
     if isinstance(clients, list):
         for client in clients:
             fields = {field.get("name"): field.get("value") for field in client.get("fields", []) if isinstance(field, dict)}
-            print(f"- name={client.get('name')} implementation={client.get('implementation')} enable={client.get('enable')} host={fields.get('host')} port={fields.get('port')} urlBase={fields.get('urlBase')} category={fields.get('movieCategory') or fields.get('tvCategory')}")
+            client_name = client.get("name")
+            implementation = client.get("implementation")
+            enabled = client.get("enable")
+            host = fields.get("host")
+            port = fields.get("port")
+            url_base = fields.get("urlBase")
+            category = fields.get("movieCategory") or fields.get("tvCategory")
+            print(f"- name={client_name} implementation={implementation} enable={enabled} host={host} port={port} urlBase={url_base} category={category}")
 PY'
 fi
 
