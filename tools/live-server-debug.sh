@@ -197,4 +197,5 @@ section "Recent important errors"
 run sh -c "docker logs --tail 1200 '$DI_CONTAINER' 2>&1 | grep -Ei 'critical|failed|error|rejected|unauthorized|unavailable|downloadclient|qualityprofile|rootfolder|auto-config|oldboys indexer|2160p api key' | grep -Evi 'REQ-START|mode=queue|mode=history' | tail -160 || true"
 
 section "Done"
-printf 'For a full archive, run: bash /home/nuc/danish-intelligence/tools/collect-server-debug.sh\n'
+printf 'For a full archive, run:\n'
+printf 'curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/collect-server-debug.sh | sudo bash\n'

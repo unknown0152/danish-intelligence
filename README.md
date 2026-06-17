@@ -226,13 +226,22 @@ redacted.
 
 For a full SSH-side server report, run this on the target server:
 
+Fast live debug output:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/live-server-debug.sh | sudo bash
+```
+
+Full redacted archive:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/collect-server-debug.sh | sudo bash
 ```
 
-The collector is read-only except for writing its report under `/tmp`. It
-packages system, Docker, Cosmos, network, filesystem, container log, and Danish
-Intelligence debug data into one redacted `.tar.gz` archive.
+Both scripts are read-only except for writing terminal output or reports under
+`/tmp`. The full collector packages system, Docker, Cosmos, network, filesystem,
+container log, and Danish Intelligence debug data into one redacted `.tar.gz`
+archive.
 
 ## Troubleshooting
 
