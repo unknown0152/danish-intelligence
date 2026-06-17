@@ -4,22 +4,21 @@
         "form": [
             {
                 "name": "ProwlarrKey",
-                "label": "Prowlarr API Key",
-                "initialValue": "{Passwords.32}",
+                "label": "Prowlarr API Key (optional)",
                 "type": "text",
-                "required": true
+                "required": false
             },
             {
                 "name": "OldBoysToken",
-                "label": "OldBoys API Token",
+                "label": "OldBoys API Token (optional)",
                 "type": "text",
-                "required": true
+                "required": false
             },
             {
                 "name": "OldBoysRSS",
-                "label": "OldBoys RSS Key (RID)",
+                "label": "OldBoys RSS Key / RID (optional)",
                 "type": "text",
-                "required": true
+                "required": false
             },
             {
                 "name": "MediaRoot",
@@ -83,7 +82,7 @@
             "labels": {
                 "cosmos-auto-update": "true",
                 "cosmos-force-network-secured": "true",
-                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/icon.png"
+                "cosmos-icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.4/icon.png"
             },
             "volumes": [
                 {

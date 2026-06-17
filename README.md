@@ -26,7 +26,7 @@ automatically configures the local Arr stack.
 Market source:
 
 ```text
-https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/cosmos-market.json
+https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.4/cosmos-market.json
 ```
 
 Image:
@@ -40,6 +40,12 @@ The Cosmos installer fields are optional:
 - `ProwlarrKey`: Prowlarr API key, only needed if the Prowlarr config folder is not mounted.
 - `OldBoysToken`: OldBoys API token, only needed for the OldBoys proxy.
 - `OldBoysRSS`: OldBoys RSS key / RID, only needed for the OldBoys proxy.
+
+For clean servers, install `Prowlarr (Danish Prerequisite)` from this market
+source first and configure its indexers there. That prerequisite uses the shared
+`media-stack` Docker network and the lowercase `prowlarr` DNS alias expected by
+the full stack. Installing generic Prowlarr from another Cosmos market can leave
+Prowlarr isolated on its own `cosmos-Prowlarr-default` network.
 
 On startup, the service waits briefly for the Arrs, then configures Radarr and
 Sonarr through their HTTP APIs. It discovers Arr API keys from read-only config
@@ -221,7 +227,7 @@ redacted.
 For a full SSH-side server report, run this on the target server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/tools/collect-server-debug.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.4/tools/collect-server-debug.sh | sudo bash
 ```
 
 The collector is read-only except for writing its report under `/tmp`. It

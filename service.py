@@ -89,14 +89,16 @@ def _read_config_key(app_name: str) -> str:
 
 
 def ensure_prowlarr_api_key() -> bool:
-    key = _clean_env("PROWLARR_API_KEY") or _clean_env("PROWLARR_APIKEY") or _read_config_key("prowlarr")
+    config_key = _read_config_key("prowlarr")
+    env_key = _clean_env("PROWLARR_API_KEY") or _clean_env("PROWLARR_APIKEY")
+    key = config_key or env_key
     if not key:
         record("prowlarr_key.missing")
         return False
 
     os.environ["PROWLARR_API_KEY"] = key
     main_proxy.PROWLARR_API_KEY = key
-    record("prowlarr_key.discovered", source="env_or_config")
+    record("prowlarr_key.discovered", source="config" if config_key else "env")
     return True
 
 

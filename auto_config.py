@@ -446,9 +446,9 @@ def _read_arr_config_keys(kind: str, app_name: str = "", url: str = "") -> list[
 
 def _prowlarr_api_key() -> str:
     return (
-        _clean_env("PROWLARR_API_KEY")
+        next(iter(_read_arr_config_keys("Prowlarr")), "")
+        or _clean_env("PROWLARR_API_KEY")
         or _clean_env("PROWLARR_APIKEY")
-        or next(iter(_read_arr_config_keys("Prowlarr")), "")
     )
 
 

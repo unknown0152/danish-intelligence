@@ -1,0 +1,75 @@
+{
+    "minVersion": "0.9.0",
+    "cosmos-installer": {
+        "form": [
+            {
+                "name": "ConfigRoot",
+                "label": "Host Config Root Path",
+                "initialValue": "/srv/config",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "PUID",
+                "label": "Container User ID (PUID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "PGID",
+                "label": "Container Group ID (PGID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            }
+        ]
+    },
+    "services": {
+        "prowlarr": {
+            "image": "lscr.io/linuxserver/prowlarr:latest",
+            "container_name": "prowlarr",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
+                "TZ=Europe/Copenhagen"
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true",
+                "cosmos-icon": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons@master/png/prowlarr.png"
+            },
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/prowlarr",
+                    "target": "/config",
+                    "type": "bind"
+                }
+            ],
+            "healthcheck": {
+                "test": [
+                    "CMD-SHELL",
+                    "curl -fsS http://localhost:9696/ping || wget -qO- http://localhost:9696/ping || exit 1"
+                ],
+                "interval": "30s",
+                "timeout": "10s",
+                "retries": 10
+            },
+            "networks": {
+                "media-stack": {
+                    "aliases": [
+                        "prowlarr"
+                    ]
+                }
+            }
+        }
+    },
+    "networks": {
+        "media-stack": {
+            "name": "media-stack",
+            "driver": "bridge",
+            "attachable": true
+        }
+    }
+}
