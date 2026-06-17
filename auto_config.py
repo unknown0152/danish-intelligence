@@ -11,6 +11,7 @@ import copy
 import json
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,11 +70,16 @@ MANAGED_CF_NAMES = {
     "HDR10+",
     "HEVC",
 }
-DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
-DEFAULT_2160P_APP_URLS = {
-    "Radarr": "http://radarr-2160p:7878",
-    "Sonarr": "http://sonarr-2160p:8989",
+DEFAULT_APP_URLS = {
+    "Radarr": os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/"),
+    "Sonarr": os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/"),
 }
+DEFAULT_2160P_APP_URLS = {
+    "Radarr": os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7878").rstrip("/"),
+    "Sonarr": os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8989").rstrip("/"),
+}
+ARR_READY_TIMEOUT_SECONDS = int(os.getenv("ARR_READY_TIMEOUT_SECONDS", "240"))
+ARR_READY_RETRY_SECONDS = int(os.getenv("ARR_READY_RETRY_SECONDS", "10"))
 PROXY_URL = os.getenv("PROXY_URL", "http://danish-intelligence:9699").rstrip("/")
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
 
@@ -401,6 +407,41 @@ def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_ke
         record("auto_config.discover.found", app=name, kind=kind, slug=_slug(name), url=url.rstrip("/"))
     record("auto_config.discover.complete", discovered_count=len(discovered), prowlarr_app_count=len(apps))
     return discovered
+
+
+def _required_arr_app_names() -> set[str]:
+    names = {"Radarr", "Sonarr"}
+    if _truthy_env("ENABLE_2160P_ARRS"):
+        names.update({"Radarr 2160p", "Sonarr 2160p"})
+    return names
+
+
+def _missing_required_arr_apps(apps: list[ArrApp]) -> set[str]:
+    discovered = {_slug(app.name) for app in apps}
+    return {name for name in _required_arr_app_names() if _slug(name) not in discovered}
+
+
+def _wait_for_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
+    deadline = time.monotonic() + max(0, ARR_READY_TIMEOUT_SECONDS)
+    attempt = 0
+    last_apps: list[ArrApp] = []
+    while True:
+        attempt += 1
+        _bootstrap_arr_apps(session, prowlarr_url, prowlarr_key)
+        last_apps = _discover_arr_apps(session, prowlarr_url, prowlarr_key)
+        missing = _missing_required_arr_apps(last_apps)
+        if not missing:
+            record("auto_config.wait_arrs.ready", attempt=attempt, discovered=[app.name for app in last_apps])
+            return last_apps
+
+        if time.monotonic() >= deadline:
+            print(f"[Core] Auto-Config: Arr readiness timed out; missing: {', '.join(sorted(missing))}", flush=True)
+            record("auto_config.wait_arrs.timeout", attempt=attempt, missing=sorted(missing), discovered=[app.name for app in last_apps])
+            return last_apps
+
+        print(f"[Core] Auto-Config: waiting for Arr API keys/routes: {', '.join(sorted(missing))}", flush=True)
+        record("auto_config.wait_arrs.retry", attempt=attempt, missing=sorted(missing), retry_seconds=ARR_READY_RETRY_SECONDS)
+        time.sleep(max(1, ARR_READY_RETRY_SECONDS))
 
 
 def _first_working_arr_key(session: requests.Session, kind: str, app_name: str, url: str, prowlarr_app_key: str = "") -> str:
@@ -1180,10 +1221,9 @@ def paint() -> dict[str, int]:
         raise RuntimeError("Prowlarr API key is not set and no mounted Prowlarr config.xml was found")
 
     session = requests.Session()
-    _bootstrap_arr_apps(session, prowlarr_url, prowlarr_key)
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
     record("auto_config.paint.indexers_loaded", count=len(prowlarr_indexers))
-    apps = _discover_arr_apps(session, prowlarr_url, prowlarr_key)
+    apps = _wait_for_arr_apps(session, prowlarr_url, prowlarr_key)
     if not apps:
         record("auto_config.paint.no_apps")
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")

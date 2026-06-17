@@ -151,6 +151,73 @@ if docker ps --format '{{.Names}}' | grep -qx danish-intelligence; then
   run_cmd danish-intelligence/env docker exec danish-intelligence sh -c 'env | sort'
   run_cmd danish-intelligence/internal-dns docker exec danish-intelligence sh -c 'for h in prowlarr radarr sonarr radarr-2160p sonarr-2160p seerr altmount plex jellyfin danish-intelligence; do echo "## $h"; getent hosts "$h" || true; done'
   run_cmd danish-intelligence/internal-paths docker exec danish-intelligence sh -c 'for p in /config /arr-config/prowlarr /arr-config/radarr /arr-config/sonarr /arr-config/radarr-2160p /arr-config/sonarr-2160p /seerr-config /media /mnt; do echo "## $p"; ls -ld "$p" 2>&1; done'
+  run_cmd danish-intelligence/arr-api-readiness docker exec danish-intelligence sh -c 'python3 <<'"'"'PY'"'"'
+import json
+import os
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from urllib import request, error
+
+APPS = {
+    "prowlarr": ("http://prowlarr:9696", "/arr-config/prowlarr/config.xml", "/api/v1/system/status"),
+    "radarr": (os.getenv("RADARR_URL", "http://radarr:7878"), "/arr-config/radarr/config.xml", "/api/v3/system/status"),
+    "sonarr": (os.getenv("SONARR_URL", "http://sonarr:8989"), "/arr-config/sonarr/config.xml", "/api/v3/system/status"),
+    "radarr-2160p": (os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7878"), "/arr-config/radarr-2160p/config.xml", "/api/v3/system/status"),
+    "sonarr-2160p": (os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8989"), "/arr-config/sonarr-2160p/config.xml", "/api/v3/system/status"),
+}
+
+def config(path):
+    p = Path(path)
+    if not p.exists():
+        return "", "", "missing"
+    try:
+        root = ET.parse(p).getroot()
+        return (root.findtext("ApiKey", "") or "").strip(), (root.findtext("Port", "") or "").strip(), "ok"
+    except Exception as exc:
+        return "", "", f"parse-error:{type(exc).__name__}"
+
+def get_json(url, key):
+    req = request.Request(url, headers={"X-Api-Key": key})
+    try:
+        with request.urlopen(req, timeout=8) as resp:
+            return resp.status, json.loads(resp.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        return exc.code, {"error": str(exc)}
+    except Exception as exc:
+        return "error", {"error": f"{type(exc).__name__}: {exc}"}
+
+print("ARR API readiness from inside danish-intelligence")
+print("Secrets are not printed.")
+keys = {}
+for name, (base_url, cfg, status_path) in APPS.items():
+    key, config_port, cfg_status = config(cfg)
+    keys[name] = key
+    status, data = get_json(base_url.rstrip("/") + status_path, key) if key else ("no-key", {})
+    version = data.get("version") if isinstance(data, dict) else None
+    app_name = data.get("appName") if isinstance(data, dict) else None
+    print(f"{name}: url={base_url} config={cfg_status} config_port={config_port or '-'} key_present={bool(key)} http_status={status} app={app_name or '-'} version={version or '-'}")
+
+prowlarr_key = keys.get("prowlarr", "")
+if prowlarr_key:
+    status, apps = get_json("http://prowlarr:9696/api/v1/applications", prowlarr_key)
+    print(f"\nProwlarr applications: http_status={status}")
+    if isinstance(apps, list):
+        for app in apps:
+            fields = {field.get("name"): field.get("value") for field in app.get("fields", []) if isinstance(field, dict)}
+            print(f"- name={app.get('name')} implementation={app.get('implementation')} syncLevel={app.get('syncLevel')} baseUrl={fields.get('baseUrl')}")
+
+for name in ("radarr", "sonarr", "radarr-2160p", "sonarr-2160p"):
+    key = keys.get(name, "")
+    if not key:
+        continue
+    base_url = APPS[name][0].rstrip("/")
+    status, clients = get_json(base_url + "/api/v3/downloadclient", key)
+    print(f"\n{name} download clients: http_status={status}")
+    if isinstance(clients, list):
+        for client in clients:
+            fields = {field.get("name"): field.get("value") for field in client.get("fields", []) if isinstance(field, dict)}
+            print(f"- name={client.get('name')} implementation={client.get('implementation')} enable={client.get('enable')} host={fields.get('host')} port={fields.get('port')} urlBase={fields.get('urlBase')} category={fields.get('movieCategory') or fields.get('tvCategory')}")
+PY'
 fi
 
 run_cmd summary/tree sh -c "find '$OUT' -type f -printf '%s %p\n' | sort -n"
