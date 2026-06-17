@@ -26,7 +26,7 @@ automatically configures the local Arr stack.
 Market source:
 
 ```text
-https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/cosmos-market.json
+https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/cosmos-market.json
 ```
 
 Image:
@@ -217,6 +217,16 @@ The diagnostics capture environment placeholder state, mounted config/media
 paths, Docker DNS resolution, API reachability, Prowlarr app discovery, and each
 auto-config paint stage. API keys, tokens, passwords, and RID values are
 redacted.
+
+For a full SSH-side server report, run this on the target server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/tools/collect-server-debug.sh | sudo bash
+```
+
+The collector is read-only except for writing its report under `/tmp`. It
+packages system, Docker, Cosmos, network, filesystem, container log, and Danish
+Intelligence debug data into one redacted `.tar.gz` archive.
 
 ## Troubleshooting
 

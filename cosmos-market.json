@@ -1,5 +1,5 @@
 {
-  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/cosmos-market.json",
+  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/cosmos-market.json",
   "showcase": [],
   "all": [
     {
@@ -17,12 +17,12 @@
       ],
       "repository": "https://github.com/unknown0152/danish-intelligence",
       "image": "ghcr.io/unknown0152/danish-intelligence",
-      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/icon.png",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/icon.png",
       "screenshots": [],
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/cosmos-compose.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/cosmos-compose.json"
     },
     {
       "id": "altmount-danish",
@@ -38,12 +38,12 @@
       ],
       "repository": "https://github.com/unknown0152/altmount-patched",
       "image": "ghcr.io/unknown0152/altmount-patched",
-      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/icon.png",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/icon.png",
       "screenshots": [],
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/altmount-v2.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/altmount-v2.json"
     },
     {
       "id": "danish-master-stack-plex",
@@ -63,12 +63,12 @@
       ],
       "repository": "https://github.com/unknown0152/danish-intelligence",
       "image": "ghcr.io/unknown0152/danish-intelligence",
-      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/icon.png",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/icon.png",
       "screenshots": [],
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/master-stack.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/master-stack.json"
     },
     {
       "id": "danish-master-stack-jellyfin",
@@ -88,12 +88,12 @@
       ],
       "repository": "https://github.com/unknown0152/danish-intelligence",
       "image": "ghcr.io/unknown0152/danish-intelligence",
-      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/icon.png",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/icon.png",
       "screenshots": [],
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.2/master-stack-jellyfin.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.3/master-stack-jellyfin.json"
     }
   ]
 }
