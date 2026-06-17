@@ -229,13 +229,13 @@ For a full SSH-side server report, run this on the target server:
 Fast live debug output:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/live-server-debug.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/live-server-debug.sh -o /tmp/live-server-debug.sh && bash /tmp/live-server-debug.sh
 ```
 
 Full redacted archive:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/collect-server-debug.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/collect-server-debug.sh -o /tmp/collect-server-debug.sh && bash /tmp/collect-server-debug.sh
 ```
 
 Both scripts are read-only except for writing terminal output or reports under
