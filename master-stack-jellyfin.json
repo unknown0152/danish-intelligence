@@ -262,6 +262,7 @@
             "image": "ghcr.io/seerr-team/seerr:latest",
             "container_name": "seerr",
             "init": true,
+            "user": "{Context.PUID}:{Context.PGID}",
             "restart": "unless-stopped",
             "environment": [
                 "PORT=5055",
