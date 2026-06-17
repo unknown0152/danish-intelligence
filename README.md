@@ -26,7 +26,7 @@ automatically configures the local Arr stack.
 Market source:
 
 ```text
-https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.7/cosmos-market.json
+https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json
 ```
 
 Image:
@@ -227,7 +227,7 @@ redacted.
 For a full SSH-side server report, run this on the target server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.7/tools/collect-server-debug.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/tools/collect-server-debug.sh | sudo bash
 ```
 
 The collector is read-only except for writing its report under `/tmp`. It
