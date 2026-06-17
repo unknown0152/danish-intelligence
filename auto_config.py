@@ -351,13 +351,26 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
         ])
 
     for kind, name, url in wanted_apps:
-        if _slug(name) in existing_names:
-            continue
-
         api_key = _first_working_arr_key(session, kind, name, url)
         if not api_key:
             print(f"[Core] Auto-Config: {name} is not reachable yet; Prowlarr registration skipped", flush=True)
             record("auto_config.bootstrap.skip_unreachable", app=name, kind=kind, url=url)
+            continue
+
+        existing_app = next((app for app in apps if _slug(str(app.get("name", ""))) == _slug(name)), None)
+        if existing_app:
+            existing_app["enable"] = True
+            existing_app["syncLevel"] = "addOnly"
+            _set_field(existing_app, "prowlarrUrl", ARR_PROXY_URL)
+            _set_field(existing_app, "baseUrl", url)
+            _set_field(existing_app, "apiKey", api_key)
+            try:
+                _put_json(session, f"{prowlarr_url}/api/v1/applications/{existing_app['id']}?forceSave=true", prowlarr_key, existing_app)
+                print(f"[Core] Auto-Config: refreshed {name} in Prowlarr", flush=True)
+                record("auto_config.bootstrap.refreshed", app=name, kind=kind, url=url)
+            except requests.RequestException as exc:
+                print(f"[Core] Auto-Config: failed to refresh {name} in Prowlarr: {exc}", flush=True)
+                record("auto_config.bootstrap.refresh_failed", app=name, kind=kind, error=str(exc), error_type=type(exc).__name__)
             continue
 
         schema = copy.deepcopy(next((item for item in schemas if _arr_kind(item) == kind), None))
