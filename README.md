@@ -220,11 +220,10 @@ For AltMount integration:
 
 - AltMount should be reachable as `http://altmount:8080`.
 - Its SAB-compatible API should be enabled at `/sabnzbd`.
-- Health monitoring, repair-on-import, segment cache, and ARR queue cleanup
-  should stay enabled. Without these, AltMount can detect a corrupt NZB at
-  read/import time, but Radarr/Sonarr may remain stuck at
-  `Downloaded - Waiting to Import` instead of getting a clean retry/cleanup
-  path.
+- Health monitoring, segment cache, and ARR queue cleanup should stay enabled.
+  Automatic repair and repair-on-import stay disabled by default so AltMount can
+  report bad files without deleting, blocklisting, or replacing media through
+  Radarr/Sonarr.
 - Playback-safe defaults keep failure masking enabled, cap background imports
   while streams are active, and size the segment cache for high-bitrate Plex
   playback.
@@ -236,7 +235,8 @@ For AltMount integration:
   after 24 hours, import history retained for 30 days, and completed NZBs kept
   for repair/debug workflows.
 - ARR queue cleanup is enabled with a 10 minute grace period. Automatic orphan
-  metadata cleanup remains disabled by default; repair-on-import stays enabled.
+  metadata cleanup, automatic repair, and repair-on-import remain disabled by
+  default.
 - The full stack defines AltMount SAB categories from the manifest. Standard
   Arrs use `movies` and `tv`; optional 2160p Arrs use `movies-2160p` and
   `tv-2160p`.
@@ -257,6 +257,26 @@ For Seerr integration:
   read from the private config volume and are not stored in the market JSON.
 - Seerr's first-run Jellyfin, Radarr, and Sonarr API keys belong in Seerr's UI
   or private config volume, never in the market JSON.
+
+## Permissions
+
+- The full-stack install form exposes `PUID` and `PGID`. Use the UID/GID that
+  owns your media and app config folders. The default is `1001:1001`, matching
+  this reference server.
+- Recommended host layout:
+  `/srv/config` and `/srv/media` owned by `media:media`, group-writable, setgid,
+  and backed by default ACLs for the container UIDs/GIDs used on the server.
+  The Golden Build may grant write ACLs to both `1000` and `1001`; set the
+  install form `PUID`/`PGID` to the UID/GID you want the LinuxServer containers
+  to use.
+- Keep `/srv/docker` root-managed and not generally writable. The media stack
+  only needs bind-mount access to config/media paths, not write access to the
+  Docker data-root.
+- `/mnt` must exist on the host and allow AltMount to create `/mnt/altmount`.
+  The stack mounts `/mnt` into AltMount, Radarr, Sonarr, and the media server
+  with `rshared` propagation so the FUSE mount is visible everywhere.
+- AltMount requires `/dev/fuse`, `SYS_ADMIN`, and
+  `security_opt=["apparmor=unconfined"]` for the native FUSE mount.
 
 ## Security Notes
 

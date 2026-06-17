@@ -36,6 +36,20 @@
                 "required": true
             },
             {
+                "name": "PUID",
+                "label": "Container User ID (PUID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "PGID",
+                "label": "Container Group ID (PGID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            },
+            {
                 "name": "Enable2160p",
                 "label": "Install separate 2160p Radarr and Sonarr",
                 "initialValue": false,
@@ -127,8 +141,8 @@
             "container_name": "altmount",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen",
                 "PORT=8080",
                 "LOG_LEVEL=warn",
@@ -213,7 +227,7 @@
                 "SYS_ADMIN"
             ],
             "security_opt": [
-                "apparmor:unconfined"
+                "apparmor=unconfined"
             ],
             "networks": {
                 "media-stack": {}
@@ -224,8 +238,8 @@
             "container_name": "plex",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen",
                 "VERSION=docker"
             ],
@@ -298,8 +312,8 @@
             "container_name": "radarr",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen"
             ],
             "volumes": [
@@ -335,8 +349,8 @@
             "container_name": "sonarr",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen"
             ],
             "volumes": [
@@ -374,8 +388,8 @@
             "container_name": "radarr-2160p",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen"
             ],
             "volumes": [
@@ -411,8 +425,8 @@
             "container_name": "sonarr-2160p",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen"
             ],
             "volumes": [

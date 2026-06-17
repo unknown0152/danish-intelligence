@@ -10,6 +10,20 @@
                 "required": true
             },
             {
+                "name": "PUID",
+                "label": "Container User ID (PUID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "PGID",
+                "label": "Container Group ID (PGID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            },
+            {
                 "name": "JWTSecret",
                 "label": "JWT Secret (Random string)",
                 "initialValue": "{Passwords.32}",
@@ -24,8 +38,8 @@
             "container_name": "{ServiceName}",
             "restart": "unless-stopped",
             "environment": [
-                "PUID=1001",
-                "PGID=1001",
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen",
                 "PORT=8080",
                 "LOG_LEVEL=warn",
@@ -93,7 +107,7 @@
                 "SYS_ADMIN"
             ],
             "security_opt": [
-                "apparmor:unconfined"
+                "apparmor=unconfined"
             ],
             "networks": {
                 "media-stack": {

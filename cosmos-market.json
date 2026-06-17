@@ -1,5 +1,5 @@
 {
-  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=14",
+  "source": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/cosmos-market.json?v=15",
   "showcase": [],
   "all": [
     {
@@ -43,7 +43,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json?v=11"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/altmount-v2.json?v=12"
     },
     {
       "id": "danish-master-stack-plex",
@@ -68,7 +68,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=11"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack.json?v=12"
     },
     {
       "id": "danish-master-stack-jellyfin",
@@ -93,7 +93,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack-jellyfin.json?v=6"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/master-stack-jellyfin.json?v=7"
     }
   ]
 }
