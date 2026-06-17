@@ -342,15 +342,15 @@ def _safe_url(url: str) -> str:
 
 
 def _clean_name(name: str) -> str:
-    name = re.sub(r"(\s*\{DK\})+$", "", name)
     name = re.sub(r"\s*\(Prowlarr\)$", "", name)
+    name = re.sub(r"(\s*\{DK\})+$", "", name)
     name = re.sub(r"\s*\[[^\]]+\]$", "", name)
     return name.strip().lower()
 
 
 def _display_name(name: str) -> str:
-    name = re.sub(r"(\s*\{DK\})+$", "", name)
     name = re.sub(r"\s*\(Prowlarr\)$", "", name)
+    name = re.sub(r"(\s*\{DK\})+$", "", name)
     return name.strip()
 
 
@@ -447,15 +447,17 @@ def _sync_prowlarr_indexers(session: requests.Session, prowlarr_url: str, prowla
     record("auto_config.prowlarr_sync.begin")
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     wanted = {_slug(name) for name in _required_arr_app_names()}
-    changed: list[dict[str, Any]] = []
+    managed: list[dict[str, Any]] = []
+    changed = 0
 
     for app in apps:
         if _slug(str(app.get("name", ""))) not in wanted:
             continue
+        managed.append(app)
         if app.get("syncLevel") != "fullSync":
             app["syncLevel"] = "fullSync"
             _put_json(session, f"{prowlarr_url}/api/v1/applications/{app['id']}?forceSave=true", prowlarr_key, app)
-            changed.append(app)
+            changed += 1
 
     try:
         command = _post_json(session, f"{prowlarr_url}/api/v1/command", prowlarr_key, {"name": "ApplicationIndexerSync"})
@@ -476,14 +478,14 @@ def _sync_prowlarr_indexers(session: requests.Session, prowlarr_url: str, prowla
                 break
         record("auto_config.prowlarr_sync.command_complete", command_id=command_id, status=status or "unknown")
 
-    for app in changed:
+    for app in managed:
         app["syncLevel"] = "addOnly"
         try:
             _put_json(session, f"{prowlarr_url}/api/v1/applications/{app['id']}?forceSave=true", prowlarr_key, app)
         except requests.RequestException as exc:
             record("auto_config.prowlarr_sync.restore_failed", app=app.get("name"), error=str(exc), error_type=type(exc).__name__)
 
-    record("auto_config.prowlarr_sync.complete", changed=len(changed))
+    record("auto_config.prowlarr_sync.complete", changed=changed, restored=len(managed))
 
 
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
