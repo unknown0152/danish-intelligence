@@ -47,12 +47,6 @@
                 "initialValue": "1001",
                 "type": "text",
                 "required": true
-            },
-            {
-                "name": "Enable2160p",
-                "label": "Install separate 2160p Radarr and Sonarr",
-                "initialValue": false,
-                "type": "checkbox"
             }
         ]
     },
@@ -72,7 +66,7 @@
                 "SEERR_URL=http://seerr:5055",
                 "MEDIA_SERVER_TYPE=plex",
                 "MEDIA_SERVER_URL=http://plex:32400",
-                "ENABLE_2160P_ARRS={Context.Enable2160p}",
+                "ENABLE_2160P_ARRS=false",
                 "ARR_READY_TIMEOUT_SECONDS=240",
                 "ARR_READY_RETRY_SECONDS=10",
                 "INSTALL_DEBUG=1",
@@ -116,20 +110,6 @@
                     "type": "bind",
                     "read_only": true
                 },
-                {if Context.Enable2160p}
-                {
-                    "source": "{Context.ConfigRoot}/radarr-2160p",
-                    "target": "/arr-config/radarr-2160p",
-                    "type": "bind",
-                    "read_only": true
-                },
-                {
-                    "source": "{Context.ConfigRoot}/sonarr-2160p",
-                    "target": "/arr-config/sonarr-2160p",
-                    "type": "bind",
-                    "read_only": true
-                },
-                {/if}
                 {
                     "source": "{Context.MediaRoot}",
                     "target": "/media",
@@ -376,83 +356,6 @@
                 "media-stack": {}
             }
         }
-        {if Context.Enable2160p}
-        ,
-        "radarr-2160p": {
-            "image": "lscr.io/linuxserver/radarr:latest",
-            "container_name": "radarr-2160p",
-            "restart": "unless-stopped",
-            "environment": [
-                "PUID={Context.PUID}",
-                "PGID={Context.PGID}",
-                "TZ=Europe/Copenhagen"
-            ],
-            "volumes": [
-                {
-                    "source": "{Context.ConfigRoot}/radarr-2160p",
-                    "target": "/config",
-                    "type": "bind"
-                },
-                {
-                    "source": "{Context.MediaRoot}",
-                    "target": "/media",
-                    "type": "bind"
-                },
-                {
-                    "source": "/mnt",
-                    "target": "/mnt",
-                    "type": "bind",
-                    "bind": {
-                        "propagation": "rshared"
-                    }
-                }
-            ],
-            "labels": {
-                "cosmos-auto-update": "true",
-                "cosmos-force-network-secured": "true"
-            },
-            "networks": {
-                "media-stack": {}
-            }
-        },
-        "sonarr-2160p": {
-            "image": "lscr.io/linuxserver/sonarr:latest",
-            "container_name": "sonarr-2160p",
-            "restart": "unless-stopped",
-            "environment": [
-                "PUID={Context.PUID}",
-                "PGID={Context.PGID}",
-                "TZ=Europe/Copenhagen"
-            ],
-            "volumes": [
-                {
-                    "source": "{Context.ConfigRoot}/sonarr-2160p",
-                    "target": "/config",
-                    "type": "bind"
-                },
-                {
-                    "source": "{Context.MediaRoot}",
-                    "target": "/media",
-                    "type": "bind"
-                },
-                {
-                    "source": "/mnt",
-                    "target": "/mnt",
-                    "type": "bind",
-                    "bind": {
-                        "propagation": "rshared"
-                    }
-                }
-            ],
-            "labels": {
-                "cosmos-auto-update": "true",
-                "cosmos-force-network-secured": "true"
-            },
-            "networks": {
-                "media-stack": {}
-            }
-        }
-        {/if}
     },
     "networks": {
         "media-stack": {
