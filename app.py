@@ -31,6 +31,18 @@ ALTMOUNT_API_KEY = os.getenv("ALTMOUNT_API_KEY") or os.getenv("ALTMOUNT_APIKEY")
 ALTMOUNT_SHIM_MAX_UPLOAD_MB = int(os.getenv("ALTMOUNT_SHIM_MAX_UPLOAD_MB", "128"))
 RADARR_URL = os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/")
 SONARR_URL = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
+DEFAULT_ARR_URLS = {
+    "radarr": RADARR_URL,
+    "sonarr": SONARR_URL,
+    "radarr-2160p": os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7878").rstrip("/"),
+    "sonarr-2160p": os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8989").rstrip("/"),
+}
+ARR_CONFIG_PATHS = {
+    "radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
+    "sonarr": ("/arr-config/sonarr/config.xml", "/srv/config/sonarr/config.xml"),
+    "radarr-2160p": ("/arr-config/radarr-2160p/config.xml", "/srv/config/radarr-2160p/config.xml"),
+    "sonarr-2160p": ("/arr-config/sonarr-2160p/config.xml", "/srv/config/sonarr-2160p/config.xml"),
+}
 
 
 def _clean_env(name: str) -> str:
@@ -39,7 +51,7 @@ def _clean_env(name: str) -> str:
 
 
 def _read_config_key(app_name: str) -> str:
-    for path in (f"/arr-config/{app_name}/config.xml", f"/srv/config/{app_name}/config.xml"):
+    for path in ARR_CONFIG_PATHS.get(app_name, (f"/arr-config/{app_name}/config.xml", f"/srv/config/{app_name}/config.xml")):
         cfg = Path(path)
         if not cfg.exists():
             continue
@@ -55,9 +67,63 @@ def _read_config_key(app_name: str) -> str:
 RADARR_API_KEY = _clean_env("RADARR_API_KEY") or _clean_env("RADARR_APIKEY") or _read_config_key("radarr")
 SONARR_API_KEY = _clean_env("SONARR_API_KEY") or _clean_env("SONARR_APIKEY") or _read_config_key("sonarr")
 
-_RADARR_NATIVE_TITLE_CACHE: dict[tuple[str, str], tuple[float, list[str]]] = {}
+ARR_API_KEYS = {
+    "radarr": RADARR_API_KEY,
+    "sonarr": SONARR_API_KEY,
+    "radarr-2160p": (
+        _clean_env("RADARR_2160P_API_KEY")
+        or _clean_env("RADARR_2160P_APIKEY")
+        or _read_config_key("radarr-2160p")
+        or RADARR_API_KEY
+    ),
+    "sonarr-2160p": (
+        _clean_env("SONARR_2160P_API_KEY")
+        or _clean_env("SONARR_2160P_APIKEY")
+        or _read_config_key("sonarr-2160p")
+        or SONARR_API_KEY
+    ),
+}
+
+_RADARR_NATIVE_TITLE_CACHE: dict[tuple[str, str, str], tuple[float, list[str]]] = {}
 _RADARR_NATIVE_TITLE_TTL = int(os.getenv("RADARR_NATIVE_TITLE_TTL", "3600"))
-_RADARR_MOVIE_LIST_CACHE: tuple[float, list[dict]] = (0.0, [])
+_RADARR_MOVIE_LIST_CACHE: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _arr_kind(source: str) -> str:
+    return "sonarr" if source.startswith("sonarr") else "radarr"
+
+
+def _arr_url(source: str) -> str:
+    return DEFAULT_ARR_URLS.get(source, DEFAULT_ARR_URLS[_arr_kind(source)])
+
+
+def _arr_api_key(source: str) -> str:
+    return ARR_API_KEYS.get(source, ARR_API_KEYS.get(_arr_kind(source), ""))
+
+
+def _source_from_url(value: str) -> str:
+    host = (urlparse(value).hostname or "").lower()
+    if host in {"radarr-2160p", "sonarr-2160p", "radarr", "sonarr"}:
+        return host
+    path = urlparse(value).path.strip("/").split("/")
+    if path and path[0] in DEFAULT_ARR_URLS:
+        return path[0]
+    return ""
+
+
+def _source_from_params(params: dict) -> str:
+    for key in ("arr_source", "source"):
+        value = str(params.get(key) or "").strip().lower()
+        if value in DEFAULT_ARR_URLS:
+            return value
+    return _source_from_url(str(params.get("ma_username") or ""))
+
+
+def _parse_proxy_path(path: str) -> tuple[str, str] | None:
+    match = re.match(r"^(?:(radarr(?:-2160p)?|sonarr(?:-2160p)?)/)?(\d+)", path)
+    if not match:
+        return None
+    return match.group(1) or "", match.group(2)
 
 
 def _is_danish_language(value) -> bool:
@@ -122,16 +188,19 @@ def _title_tokens(title: str) -> list[str]:
     ]
 
 
-async def _radarr_movie_list(session) -> list[dict]:
-    global _RADARR_MOVIE_LIST_CACHE
+async def _radarr_movie_list(source: str, session) -> list[dict]:
+    source = source if source.startswith("radarr") else "radarr"
+    api_key = _arr_api_key(source)
+    if not api_key:
+        return []
     now = time.monotonic()
-    cached_at, cached_movies = _RADARR_MOVIE_LIST_CACHE
+    cached_at, cached_movies = _RADARR_MOVIE_LIST_CACHE.get(source, (0.0, []))
     if cached_movies and now - cached_at < _RADARR_NATIVE_TITLE_TTL:
         return cached_movies
     try:
-        headers = {"X-Api-Key": RADARR_API_KEY}
+        headers = {"X-Api-Key": api_key}
         async with session.get(
-            f"{RADARR_URL}/api/v3/movie",
+            f"{_arr_url(source)}/api/v3/movie",
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=10),
         ) as resp:
@@ -143,20 +212,20 @@ async def _radarr_movie_list(session) -> list[dict]:
         log(f"radarr-native-title: movie list failed: {exc!r}", "DEBUG")
         return cached_movies
     if isinstance(movies, list):
-        _RADARR_MOVIE_LIST_CACHE = (now, movies)
+        _RADARR_MOVIE_LIST_CACHE[source] = (now, movies)
         return movies
     return cached_movies
 
 
-async def _radarr_native_titles_for_text_search(params: dict, session) -> list[str]:
-    if params.get("t") != "search" or not RADARR_API_KEY:
+async def _radarr_native_titles_for_text_search(source: str, params: dict, session) -> list[str]:
+    if params.get("t") != "search" or not _arr_api_key(source):
         return []
     query_title, query_year = _query_title_and_year(str(params.get("q") or ""))
     if not query_title or query_year is None:
         return []
     query_key = _title_key(query_title)
     matches = []
-    for movie in await _radarr_movie_list(session):
+    for movie in await _radarr_movie_list(source, session):
         if not isinstance(movie, dict):
             continue
         if int(movie.get("year") or 0) != query_year:
@@ -223,38 +292,41 @@ def _filter_text_search_to_native_titles(content: str, params: dict, native_titl
     return filtered
 
 
-async def _radarr_native_titles_for_search(params: dict, session) -> list[str]:
+async def _radarr_native_titles_for_search(source: str, params: dict, session) -> list[str]:
     """Return known titles for a Danish-original Radarr movie search.
 
     This lets native Danish films be treated as Danish audio only when the
     current Radarr search context confirms the exact tmdbid/imdbid belongs to a
     Danish-original movie. It avoids broad rules like "NORDIC means audio".
     """
+    if not source.startswith("radarr"):
+        return []
     if params.get("t") == "search":
-        return await _radarr_native_titles_for_text_search(params, session)
-    if params.get("t") != "movie" or not RADARR_API_KEY:
+        return await _radarr_native_titles_for_text_search(source, params, session)
+    api_key = _arr_api_key(source)
+    if params.get("t") != "movie" or not api_key:
         return []
     tmdbid = str(params.get("tmdbid") or params.get("tmdb_id") or "").strip()
     imdbid = str(params.get("imdbid") or params.get("imdb_id") or "").strip()
     if tmdbid:
         lookup_kind, lookup_id = "tmdb", tmdbid
-        url = f"{RADARR_URL}/api/v3/movie/lookup/tmdb"
+        url = f"{_arr_url(source)}/api/v3/movie/lookup/tmdb"
         query = {"tmdbId": tmdbid}
     elif imdbid:
         lookup_kind, lookup_id = "imdb", imdbid
-        url = f"{RADARR_URL}/api/v3/movie/lookup/imdb"
+        url = f"{_arr_url(source)}/api/v3/movie/lookup/imdb"
         query = {"imdbId": imdbid}
     else:
         return []
 
-    cache_key = (lookup_kind, lookup_id)
+    cache_key = (source, lookup_kind, lookup_id)
     now = time.monotonic()
     cached = _RADARR_NATIVE_TITLE_CACHE.get(cache_key)
     if cached and now - cached[0] < _RADARR_NATIVE_TITLE_TTL:
         return cached[1]
 
     try:
-        headers = {"X-Api-Key": RADARR_API_KEY}
+        headers = {"X-Api-Key": api_key}
         async with session.get(
             url,
             params=query,
@@ -314,18 +386,20 @@ def _redacted_query(query) -> str:
 async def handle_altmount(request: web.Request) -> web.Response:
     """Shim for AltMount/SABnzbd: translates mode=qstatus -> mode=status."""
     params = dict(request.rel_url.query)
+    path_parts = request.path.lstrip("/").split("/")
+    source = path_parts[1] if len(path_parts) > 1 and path_parts[1] in DEFAULT_ARR_URLS else _source_from_params(params)
     if params.get("mode") == "qstatus":
         params["mode"] = "status"
     if ALTMOUNT_API_KEY:
         params["apikey"] = ALTMOUNT_API_KEY
     elif "ma_username" not in params and "ma_password" not in params:
         params.pop("apikey", None)
-        if RADARR_API_KEY:
-            params["ma_username"] = RADARR_URL
-            params["ma_password"] = RADARR_API_KEY
-        elif SONARR_API_KEY:
-            params["ma_username"] = SONARR_URL
-            params["ma_password"] = SONARR_API_KEY
+        if not source:
+            source = "radarr" if RADARR_API_KEY else "sonarr"
+        api_key = _arr_api_key(source)
+        if api_key:
+            params["ma_username"] = _arr_url(source)
+            params["ma_password"] = api_key
 
     # Forward to AltMount container
     alt_url = f"{ALTMOUNT_URL}?{urlencode(params)}"
@@ -359,10 +433,10 @@ async def handle(request: web.Request) -> web.Response:
     if path.startswith("altmount"):
         return await handle_altmount(request)
 
-    match = re.match(r"^(\d+)", path)
-    indexer_id = match.group(1) if match else None
-    if not indexer_id:
+    parsed_path = _parse_proxy_path(path)
+    if not parsed_path:
         return web.Response(text="Invalid Indexer ID", status=400)
+    arr_source, indexer_id = parsed_path
 
     params = dict(request.rel_url.query)
     incoming_key = params.get("apikey") or request.headers.get("X-Api-Key", "")
@@ -379,7 +453,8 @@ async def handle(request: web.Request) -> web.Response:
     # v5.6 Layer 1: in-flight request dedup
     dedup_key = None
     if DKSUBS_PROXY_V56_FEATURES and params.get("t") in ("search", "movie", "tvsearch"):
-        dedup_key = request_key(indexer_id, params)
+        dedup_scope = f"{arr_source}:{indexer_id}" if arr_source else indexer_id
+        dedup_key = request_key(dedup_scope, params)
         cached = await dedup_get(dedup_key)
         if cached is not None:
             return web.Response(body=cached,
@@ -391,12 +466,13 @@ async def handle(request: web.Request) -> web.Response:
                     return web.Response(body=cached,
                                         headers={"Content-Type": "application/xml"})
             return await _handle_inner(request, indexer_id, params,
+                                       arr_source,
                                        apikey, dedup_key)
 
-    return await _handle_inner(request, indexer_id, params, apikey, dedup_key)
+    return await _handle_inner(request, indexer_id, params, arr_source, apikey, dedup_key)
 
 
-async def _handle_inner(request, indexer_id, params, apikey, dedup_key):
+async def _handle_inner(request, indexer_id, params, arr_source, apikey, dedup_key):
     """Original handle body: fetch upstream, enrich, hunt, return response."""
     params["extended"] = "1"
 
@@ -479,7 +555,8 @@ async def _handle_inner(request, indexer_id, params, apikey, dedup_key):
         media_type = "tv" if params.get("t") == "tvsearch" else "movie"
         native_titles = []
         if media_type == "movie":
-            native_titles = await _radarr_native_titles_for_search(params, session)
+            source = arr_source or _source_from_params(params) or "radarr"
+            native_titles = await _radarr_native_titles_for_search(source, params, session)
             content = _filter_text_search_to_native_titles(content, params, native_titles)
         verdict_suppressed = False
         if ext_id and DKSUBS_PROXY_V56_FEATURES:

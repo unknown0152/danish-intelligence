@@ -675,7 +675,7 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
         prowlarr_id = by_name.get(base_name)
         if not prowlarr_id:
             continue
-        _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/{prowlarr_id}/api")
+        _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/{app.slug}/{prowlarr_id}/api")
         _set_field(indexer, "apiKey", prowlarr_key)
         indexer["name"] = f"{_display_name(indexer.get('name', ''))} {{DK}}"
         _put_json(session, f"{api}/indexer/{indexer['id']}?forceSave=true", app.api_key, indexer)
