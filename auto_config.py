@@ -569,6 +569,42 @@ def _sync_prowlarr_indexers(session: requests.Session, prowlarr_url: str, prowla
     record("auto_config.prowlarr_sync.complete", changed=changed, restored=len(managed))
 
 
+def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> int:
+    """Keep Prowlarr's preserved OldBoys indexer aligned with this install's proxy key."""
+    proxy_key = _clean_env("PROXY_API_KEY")
+    if not proxy_key:
+        record("auto_config.prowlarr_oldboys.skip_missing_proxy_key")
+        return 0
+
+    changed = 0
+    indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
+    for indexer in indexers:
+        if _clean_name(str(indexer.get("name", ""))) != "oldboys":
+            continue
+        indexer["enable"] = True
+        _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/ob")
+        _set_field(indexer, "apiPath", "/api")
+        _set_field(indexer, "apiKey", proxy_key)
+        try:
+            _put_json(session, f"{prowlarr_url}/api/v1/indexer/{indexer['id']}?forceSave=true", prowlarr_key, indexer)
+            changed += 1
+        except requests.RequestException as exc:
+            record(
+                "auto_config.prowlarr_oldboys.update_failed",
+                indexer=indexer.get("name"),
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+
+    if changed:
+        try:
+            _post_json(session, f"{prowlarr_url}/api/v1/command", prowlarr_key, {"name": "CheckHealth"})
+        except requests.RequestException as exc:
+            record("auto_config.prowlarr_oldboys.health_check_failed", error=str(exc), error_type=type(exc).__name__)
+    record("auto_config.prowlarr_oldboys.complete", changed=changed)
+    return changed
+
+
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
     record("auto_config.discover.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
@@ -1493,6 +1529,7 @@ def paint() -> dict[str, int]:
     session = requests.Session()
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
     record("auto_config.paint.indexers_loaded", count=len(prowlarr_indexers))
+    _ensure_prowlarr_oldboys_proxy_key(session, prowlarr_url, prowlarr_key)
     apps = _wait_for_arr_apps(session, prowlarr_url, prowlarr_key)
     if not apps:
         record("auto_config.paint.no_apps")
