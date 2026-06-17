@@ -1025,6 +1025,7 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
     
     for client in clients:
         if _is_altmount_proxy_client(client):
+            client["priority"] = 1
             _set_field(client, "host", PROXY_HOST)
             _set_field(client, "port", PROXY_PORT)
             _set_field(client, "useSsl", PROXY_USE_SSL)
@@ -1049,6 +1050,7 @@ def _ensure_download_client(session: requests.Session, app: ArrApp) -> int:
         "name": "AltMount",
         "implementation": "Sabnzbd",
         "configContract": "SabnzbdSettings",
+        "priority": 1,
         "fields": [
             {"name": "host", "value": PROXY_HOST},
             {"name": "port", "value": PROXY_PORT},
