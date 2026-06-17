@@ -251,24 +251,28 @@ def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
     )
 
 
-def _bootstrap_optional_2160p_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
-    if not _truthy_env("ENABLE_2160P_ARRS"):
-        return
-
+def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     existing_names = {_slug(str(app.get("name", ""))) for app in apps}
     schemas = _get_json(session, f"{prowlarr_url}/api/v1/applications/schema", prowlarr_key)
 
-    for kind, name, url in (
-        ("Radarr", "Radarr 2160p", DEFAULT_2160P_APP_URLS["Radarr"]),
-        ("Sonarr", "Sonarr 2160p", DEFAULT_2160P_APP_URLS["Sonarr"]),
-    ):
+    wanted_apps = [
+        ("Radarr", "Radarr", DEFAULT_APP_URLS["Radarr"]),
+        ("Sonarr", "Sonarr", DEFAULT_APP_URLS["Sonarr"]),
+    ]
+    if _truthy_env("ENABLE_2160P_ARRS"):
+        wanted_apps.extend([
+            ("Radarr", "Radarr 2160p", DEFAULT_2160P_APP_URLS["Radarr"]),
+            ("Sonarr", "Sonarr 2160p", DEFAULT_2160P_APP_URLS["Sonarr"]),
+        ])
+
+    for kind, name, url in wanted_apps:
         if _slug(name) in existing_names:
             continue
 
         api_key = _first_working_arr_key(session, kind, name, url)
         if not api_key:
-            print(f"[Core] Auto-Config: {name} is enabled but not reachable yet; Prowlarr registration skipped", flush=True)
+            print(f"[Core] Auto-Config: {name} is not reachable yet; Prowlarr registration skipped", flush=True)
             continue
 
         schema = copy.deepcopy(next((item for item in schemas if _arr_kind(item) == kind), None))
@@ -285,6 +289,7 @@ def _bootstrap_optional_2160p_apps(session: requests.Session, prowlarr_url: str,
         try:
             _post_json(session, f"{prowlarr_url}/api/v1/applications?forceSave=true", prowlarr_key, schema)
             print(f"[Core] Auto-Config: registered {name} in Prowlarr", flush=True)
+            existing_names.add(_slug(name))
         except requests.RequestException as exc:
             print(f"[Core] Auto-Config: failed to register {name} in Prowlarr: {exc}", flush=True)
 
@@ -1006,7 +1011,7 @@ def paint() -> dict[str, int]:
         raise RuntimeError("Prowlarr API key is not set and no mounted Prowlarr config.xml was found")
 
     session = requests.Session()
-    _bootstrap_optional_2160p_apps(session, prowlarr_url, prowlarr_key)
+    _bootstrap_arr_apps(session, prowlarr_url, prowlarr_key)
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
     apps = _discover_arr_apps(session, prowlarr_url, prowlarr_key)
     if not apps:
