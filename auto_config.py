@@ -70,13 +70,10 @@ MANAGED_CF_NAMES = {
     "HDR10+",
     "HEVC",
 }
-DEFAULT_APP_URLS = {
-    "Radarr": os.getenv("RADARR_URL", "http://radarr:7878").rstrip("/"),
-    "Sonarr": os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/"),
-}
+DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
 DEFAULT_2160P_APP_URLS = {
-    "Radarr": os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7878").rstrip("/"),
-    "Sonarr": os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8989").rstrip("/"),
+    "Radarr": "http://radarr-2160p:7878",
+    "Sonarr": "http://sonarr-2160p:8989",
 }
 ARR_READY_TIMEOUT_SECONDS = int(os.getenv("ARR_READY_TIMEOUT_SECONDS", "240"))
 ARR_READY_RETRY_SECONDS = int(os.getenv("ARR_READY_RETRY_SECONDS", "10"))
@@ -191,10 +188,60 @@ def _danish_profile_names(app: ArrApp) -> tuple[str, str]:
     return PROFILE_DANISH_AUDIO, PROFILE_DANISH_SUBTITLES
 
 
-def _default_arr_url(kind: str, name: str) -> str:
+def _env_arr_url(kind: str, name: str) -> str:
     if _is_2160p_instance(name):
-        return DEFAULT_2160P_APP_URLS[kind]
-    return DEFAULT_APP_URLS[kind]
+        return _clean_env(f"{kind.upper()}_2160P_URL").rstrip("/")
+    return _clean_env(f"{kind.upper()}_URL").rstrip("/")
+
+
+def _url_with_port(url: str, port: int) -> str:
+    parsed = urlparse(url)
+    host = parsed.hostname or parsed.netloc or ""
+    if not host:
+        return url.rstrip("/")
+    netloc = f"{host}:{port}"
+    return urlunparse((parsed.scheme or "http", netloc, parsed.path.rstrip("/"), "", "", "")).rstrip("/")
+
+
+def _read_arr_config_port(kind: str, app_name: str = "", url: str = "") -> int | None:
+    config_keys: list[str] = []
+    if app_name:
+        config_keys.append(_slug(app_name))
+    host = urlparse(url).hostname or ""
+    if host:
+        config_keys.append(host)
+    if _is_2160p_instance(app_name, url):
+        config_keys.append(f"{kind.lower()}-2160p")
+    config_keys.append(kind)
+
+    seen_paths: set[str] = set()
+    for config_key in dict.fromkeys(config_keys):
+        for path in ARR_CONFIG_PATHS.get(config_key, ()):
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            cfg = Path(path)
+            if not cfg.exists():
+                continue
+            try:
+                port = (ET.parse(cfg).getroot().findtext("Port", default="") or "").strip()
+                if port.isdigit() and int(port) > 0:
+                    record("auto_config.config_port.read", kind=kind, app=app_name, path=path, port=int(port))
+                    return int(port)
+            except Exception as exc:
+                record("auto_config.config_port.read_failed", kind=kind, app=app_name, path=path, error=str(exc), error_type=type(exc).__name__)
+    return None
+
+
+def _default_arr_url(kind: str, name: str) -> str:
+    env_url = _env_arr_url(kind, name)
+    if env_url:
+        return env_url
+    default_url = DEFAULT_2160P_APP_URLS[kind] if _is_2160p_instance(name) else DEFAULT_APP_URLS[kind]
+    config_port = _read_arr_config_port(kind, name, default_url)
+    if config_port is not None:
+        return _url_with_port(default_url, config_port)
+    return default_url
 
 
 def _truthy_env(name: str) -> bool:
@@ -341,13 +388,13 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
     )
 
     wanted_apps = [
-        ("Radarr", "Radarr", DEFAULT_APP_URLS["Radarr"]),
-        ("Sonarr", "Sonarr", DEFAULT_APP_URLS["Sonarr"]),
+        ("Radarr", "Radarr", _default_arr_url("Radarr", "Radarr")),
+        ("Sonarr", "Sonarr", _default_arr_url("Sonarr", "Sonarr")),
     ]
     if _truthy_env("ENABLE_2160P_ARRS"):
         wanted_apps.extend([
-            ("Radarr", "Radarr 2160p", DEFAULT_2160P_APP_URLS["Radarr"]),
-            ("Sonarr", "Sonarr 2160p", DEFAULT_2160P_APP_URLS["Sonarr"]),
+            ("Radarr", "Radarr 2160p", _default_arr_url("Radarr", "Radarr 2160p")),
+            ("Sonarr", "Sonarr 2160p", _default_arr_url("Sonarr", "Sonarr 2160p")),
         ])
 
     for kind, name, url in wanted_apps:

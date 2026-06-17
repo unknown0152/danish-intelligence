@@ -157,6 +157,7 @@ import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib import request, error
+from urllib.parse import urlparse, urlunparse
 
 APPS = {
     "prowlarr": ("http://prowlarr:9696", "/arr-config/prowlarr/config.xml", "/api/v1/system/status"),
@@ -186,11 +187,21 @@ def get_json(url, key):
     except Exception as exc:
         return "error", {"error": f"{type(exc).__name__}: {exc}"}
 
+def with_port(url, port):
+    parsed = urlparse(url)
+    host = parsed.hostname or parsed.netloc
+    if not host:
+        return url
+    return urlunparse((parsed.scheme or "http", f"{host}:{port}", parsed.path.rstrip("/"), "", "", "")).rstrip("/")
+
 print("ARR API readiness from inside danish-intelligence")
 print("Secrets are not printed.")
 keys = {}
 for name, (base_url, cfg, status_path) in APPS.items():
     key, config_port, cfg_status = config(cfg)
+    if config_port.isdigit():
+        base_url = with_port(base_url, int(config_port))
+        APPS[name] = (base_url, cfg, status_path)
     keys[name] = key
     status, data = get_json(base_url.rstrip("/") + status_path, key) if key else ("no-key", {})
     version = data.get("version") if isinstance(data, dict) else None
