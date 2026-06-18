@@ -49,13 +49,6 @@
                 "required": true
             },
             {
-                "name": "AltMountKey",
-                "label": "AltMount Internal API Key",
-                "initialValue": "{Passwords.32}",
-                "type": "text",
-                "required": true
-            },
-            {
                 "name": "MediaServerExternalUrl",
                 "label": "Media Server External URL (optional)",
                 "type": "text",
@@ -102,7 +95,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.13",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.14",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -111,7 +104,7 @@
                 "OB_API_TOKEN={Context.OldBoysToken}",
                 "OB_RID={Context.OldBoysRSS}",
                 "PROXY_API_KEY={Passwords.32}",
-                "ALTMOUNT_API_KEY={Context.AltMountKey}",
+                "ALTMOUNT_API_KEY={Passwords.33}",
                 "PROXY_URL=http://danish-intelligence:9699",
                 "ALTMOUNT_URL=http://altmount:8080",
                 "PUID={Context.PUID}",
@@ -221,7 +214,7 @@
                 "LOG_LEVEL=warn",
                 "JWT_SECRET={Passwords.64}",
                 "ALTMOUNT_AUTH_LOGIN_REQUIRED=false",
-                "ALTMOUNT_API_KEY_OVERRIDE={Context.AltMountKey}",
+                "ALTMOUNT_API_KEY_OVERRIDE={Passwords.33}",
                 "ALTMOUNT_MOUNT_TYPE=fuse",
                 "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
                 "ALTMOUNT_FUSE_ENABLED=true",
@@ -369,7 +362,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.13",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.14",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",

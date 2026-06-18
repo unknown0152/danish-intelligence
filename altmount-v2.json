@@ -22,20 +22,6 @@
                 "initialValue": "1001",
                 "type": "text",
                 "required": true
-            },
-            {
-                "name": "JWTSecret",
-                "label": "JWT Secret (Random string)",
-                "initialValue": "{Passwords.32}",
-                "type": "text",
-                "required": true
-            },
-            {
-                "name": "AltMountKey",
-                "label": "AltMount API Key",
-                "initialValue": "{Passwords.32}",
-                "type": "text",
-                "required": true
             }
         ]
     },
@@ -50,8 +36,8 @@
                 "TZ=Europe/Copenhagen",
                 "PORT=8080",
                 "LOG_LEVEL=warn",
-                "JWT_SECRET={Context.JWTSecret}",
-                "ALTMOUNT_API_KEY_OVERRIDE={Context.AltMountKey}",
+                "JWT_SECRET={Passwords.34}",
+                "ALTMOUNT_API_KEY_OVERRIDE={Passwords.33}",
                 "ALTMOUNT_AUTH_LOGIN_REQUIRED=false",
                 "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
                 "ALTMOUNT_SABNZBD_COMPLETE_DIR=/",
