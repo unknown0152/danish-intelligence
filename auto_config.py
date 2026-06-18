@@ -121,6 +121,11 @@ SEERR_DB_PATHS = (
     "/app/config/db/db.sqlite3",
     "/srv/config/seerr/db/db.sqlite3",
 )
+SEERR_MEDIA_SERVER_TYPE_PLEX = 1
+SEERR_MEDIA_SERVER_TYPE_JELLYFIN = 2
+SEERR_DEFAULT_PERMISSIONS = 48
+SEERR_LOCAL_USER_TYPE = 2
+SEERR_LOCAL_ADMIN_PERMISSIONS = 2
 JELLYFIN_DB_PATHS = (
     "/jellyfin-config/data/data/jellyfin.db",
     "/app/jellyfin-config/data/data/jellyfin.db",
@@ -957,9 +962,9 @@ def _ensure_seerr_admin_user() -> int:
             conn.execute(
                 """
                 insert into user (id, email, username, permissions, avatar, password, userType)
-                values (1, ?, ?, 2, ?, ?, 2)
+                values (1, ?, ?, ?, ?, ?, ?)
                 """,
-                (email, "admin", "/avatar.png", password_hash),
+                (email, "admin", SEERR_LOCAL_ADMIN_PERMISSIONS, "/avatar.png", password_hash, SEERR_LOCAL_USER_TYPE),
             )
             conn.execute(
                 """
@@ -1232,7 +1237,7 @@ def _seed_seerr_settings_file() -> bool:
                 "applicationTitle": SEERR_TITLE,
                 "applicationUrl": _clean_env("SEERR_APPLICATION_URL") or _clean_env("SEERR_EXTERNAL_URL"),
                 "cacheImages": True,
-                "defaultPermissions": 48,
+                "defaultPermissions": SEERR_DEFAULT_PERMISSIONS,
                 "defaultQuotas": {"movie": {}, "tv": {}},
                 "hideAvailable": False,
                 "hideBlocklisted": False,
@@ -1246,7 +1251,11 @@ def _seed_seerr_settings_file() -> bool:
                 "blocklistLanguage": "",
                 "blocklistedTags": "",
                 "blocklistedTagsLimit": 50,
-                "mediaServerType": 2 if _media_server_type() == "jellyfin" else 1,
+                "mediaServerType": (
+                    SEERR_MEDIA_SERVER_TYPE_JELLYFIN
+                    if _media_server_type() == "jellyfin"
+                    else SEERR_MEDIA_SERVER_TYPE_PLEX
+                ),
                 "partialRequestsEnabled": True,
                 "enableSpecialEpisodes": False,
                 "locale": "en",
@@ -1279,7 +1288,7 @@ def _seed_seerr_settings_file() -> bool:
     for key, value in {
         "applicationTitle": SEERR_TITLE,
         "cacheImages": True,
-        "defaultPermissions": 48,
+        "defaultPermissions": SEERR_DEFAULT_PERMISSIONS,
         "streamingRegion": "DK",
         "originalLanguage": "da|en",
         "localLogin": True,
@@ -1292,7 +1301,11 @@ def _seed_seerr_settings_file() -> bool:
 
     media_type = _media_server_type()
     if media_type:
-        wanted_type = 2 if media_type == "jellyfin" else 1
+        wanted_type = (
+            SEERR_MEDIA_SERVER_TYPE_JELLYFIN
+            if media_type == "jellyfin"
+            else SEERR_MEDIA_SERVER_TYPE_PLEX
+        )
         if main.get("mediaServerType") != wanted_type:
             main["mediaServerType"] = wanted_type
             changed = True

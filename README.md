@@ -19,7 +19,8 @@ automatically configures the local Arr stack.
   `http://danish-intelligence:9699`.
 - Deploys Seerr in the full stack for request management without storing private
   Jellyfin, Radarr, Sonarr, or Seerr API keys in the market manifest.
-- Keeps the legacy `dksubs-proxy` hostname as a network alias during migration.
+- Keeps `dksubs-proxy` as a compatibility network alias for older saved Arr
+  indexer URLs.
 
 ## Cosmos Install
 
@@ -35,9 +36,10 @@ Image:
 ghcr.io/unknown0152/danish-intelligence:latest
 ```
 
-The Cosmos installer fields are optional:
+The core Cosmos installer fields are optional:
 
-- `ProwlarrKey`: Prowlarr API key, only needed if the Prowlarr config folder is not mounted.
+- `ProwlarrKey`: Prowlarr API key. Danish Intelligence first tries mounted
+  Prowlarr config, then this explicit field.
 - `OldBoysToken`: OldBoys API token, only needed for the OldBoys proxy.
 - `OldBoysRSS`: OldBoys RSS key / RID, only needed for the OldBoys proxy.
 
@@ -295,8 +297,9 @@ For AltMount integration:
   market manifest so Cosmos cannot expand two random placeholders into
   mismatched keys. AltMount requires this override to be exactly 32 characters.
   The public Arr-facing `PROXY_API_KEY` remains random per install.
-- If `ALTMOUNT_APIKEY` is not supplied, the `/altmount` shim adds local
-  Radarr/Sonarr API credentials on the internal request to AltMount.
+- The `/altmount` shim translates Arr SAB requests to AltMount's internal API
+  using the private AltMount key, so Radarr and Sonarr only need the generated
+  Arr-facing `PROXY_API_KEY`.
 
 For Seerr integration:
 
@@ -308,6 +311,8 @@ For Seerr integration:
 - Danish Intelligence mounts the Seerr config at `/seerr-config`, creates the
   first local Seerr admin only when the Seerr database has no users, then adds
   the discovered Radarr/Sonarr entries through Seerr's API.
+- The generated local Seerr admin is for bootstrap and recovery. Normal users
+  can still sign in with Jellyfin or Plex when that media server is configured.
 - The install form exposes `SeerrAdminEmail` and optional
   `SeerrAdminPassword`. If the password is left blank, Danish Intelligence
   generates one and saves it at

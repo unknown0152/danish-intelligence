@@ -17,6 +17,9 @@ from urllib.parse import urlparse
 
 
 SETTINGS_PATH = Path(os.getenv("SEERR_SETTINGS_PATH", "/seerr-config/settings.json"))
+SEERR_MEDIA_SERVER_TYPE_PLEX = 1
+SEERR_MEDIA_SERVER_TYPE_JELLYFIN = 2
+SEERR_DEFAULT_PERMISSIONS = 48
 
 
 def clean_env(name: str) -> str:
@@ -62,7 +65,7 @@ def default_settings() -> dict:
             "applicationTitle": "Danish Requests",
             "applicationUrl": clean_env("SEERR_APPLICATION_URL") or clean_env("SEERR_EXTERNAL_URL"),
             "cacheImages": True,
-            "defaultPermissions": 48,
+            "defaultPermissions": SEERR_DEFAULT_PERMISSIONS,
             "defaultQuotas": {"movie": {}, "tv": {}},
             "hideAvailable": False,
             "hideBlocklisted": False,
@@ -76,7 +79,11 @@ def default_settings() -> dict:
             "blocklistLanguage": "",
             "blocklistedTags": "",
             "blocklistedTagsLimit": 50,
-            "mediaServerType": 2 if media_type == "jellyfin" else 1,
+            "mediaServerType": (
+                SEERR_MEDIA_SERVER_TYPE_JELLYFIN
+                if media_type == "jellyfin"
+                else SEERR_MEDIA_SERVER_TYPE_PLEX
+            ),
             "partialRequestsEnabled": True,
             "enableSpecialEpisodes": False,
             "locale": "en",
