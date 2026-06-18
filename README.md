@@ -335,9 +335,14 @@ For AltMount integration:
 - Playback-safe defaults disable streaming failure masking so real segment/NZB
   failures are visible, cap background imports while streams are active, and
   size the segment cache for high-bitrate playback.
-- The full stack pins the native FUSE mount shape used by the Arrs:
-  mount type `fuse`, mount path `/mnt/altmount`, and metadata under
+- The full stack pins the native AltMount layout used by the Arrs:
+  mount type `fuse`, mount path `/mnt/altmount`, symlink import directory
+  `/mnt/altmount-import`, SAB complete dir `/`, and metadata under
   `/config/metadata`.
+- AltMount uses `SYMLINK` import strategy by default. Radarr/Sonarr import from
+  `/mnt/altmount-import/<category>/...`, while each symlink targets the native
+  FUSE content under `/mnt/altmount`. This avoids full file copies through the
+  FUSE mount during normal imports.
 - Import Processing is kept Radarr/Sonarr focused: video extensions only,
   sample filtering enabled, release-name renaming enabled, failed items cleaned
   after 24 hours, import history retained for 30 days, and completed NZBs kept
@@ -425,9 +430,11 @@ For Plex integration:
 - Keep `/srv/docker` root-managed and not generally writable. The media stack
   only needs bind-mount access to config/media paths, not write access to the
   Docker data-root.
-- `/mnt` must exist on the host and allow AltMount to create `/mnt/altmount`.
+- `/mnt` must exist on the host and allow AltMount to create `/mnt/altmount`
+  and `/mnt/altmount-import`.
   The stack mounts `/mnt` into AltMount, Radarr, Sonarr, and the media server
-  with `rshared` propagation so the FUSE mount is visible everywhere.
+  with `rshared` propagation so the FUSE mount and symlink import tree are
+  visible everywhere.
 - AltMount requires `/dev/fuse`, `SYS_ADMIN`, and
   `security_opt=["apparmor=unconfined"]` for the native FUSE mount.
 

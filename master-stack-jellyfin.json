@@ -77,7 +77,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.10",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.11",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -189,7 +189,7 @@
                 "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
                 "ALTMOUNT_FUSE_ENABLED=true",
                 "ALTMOUNT_FUSE_MOUNT_PATH=/mnt/altmount",
-                "ALTMOUNT_SABNZBD_COMPLETE_DIR=/complete",
+                "ALTMOUNT_SABNZBD_COMPLETE_DIR=/",
                 "ALTMOUNT_ENABLE_SABNZBD=true",
                 "ALTMOUNT_ENABLE_ARRS=true",
                 "ALTMOUNT_METADATA_ROOT_PATH=/config/metadata",
@@ -211,7 +211,8 @@
                 "ALTMOUNT_IMPORT_MAX_CONCURRENT_IMPORTS_WHILE_STREAMING=1",
                 "ALTMOUNT_IMPORT_ALLOWED_FILE_EXTENSIONS=.mkv,.mp4,.avi,.ts,.m4v,.mov,.wmv,.mpg,.mpeg,.xvid,.rm,.rmvb,.asf,.asx,.wtv,.mk3d,.dvr-ms",
                 "ALTMOUNT_IMPORT_MAX_DOWNLOAD_PREFETCH=10",
-                "ALTMOUNT_IMPORT_STRATEGY=NONE",
+                "ALTMOUNT_IMPORT_STRATEGY=SYMLINK",
+                "ALTMOUNT_IMPORT_DIR=/mnt/altmount-import",
                 "ALTMOUNT_IMPORT_WATCH_INTERVAL_SECONDS=10",
                 "ALTMOUNT_IMPORT_ALLOW_NESTED_RAR_EXTRACTION=true",
                 "ALTMOUNT_IMPORT_EXPAND_BLURAY_ISO=true",
@@ -221,6 +222,7 @@
                 "ALTMOUNT_IMPORT_HISTORY_RETENTION_DAYS=30",
                 "ALTMOUNT_IMPORT_DELETE_COMPLETED_NZB=false",
                 "ALTMOUNT_ENABLE_HEALTH=true",
+                "ALTMOUNT_HEALTH_LIBRARY_DIR=/media",
                 "ALTMOUNT_HEALTH_CLEANUP_ORPHANED_METADATA=false",
                 "ALTMOUNT_HEALTH_CHECK_INTERVAL_SECONDS=5",
                 "ALTMOUNT_HEALTH_MAX_CONCURRENT_JOBS=1",
@@ -324,7 +326,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.10",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.11",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",

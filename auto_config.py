@@ -367,6 +367,26 @@ def _altmount_api_url(path: str, api_key: str) -> str:
     return f"{_altmount_url()}/api{path}?{urlencode({'apikey': api_key})}"
 
 
+def _desired_altmount_import_strategy() -> str:
+    return (_clean_env("DANISH_ALTMOUNT_IMPORT_STRATEGY") or "SYMLINK").strip().upper()
+
+
+def _desired_altmount_mount_path() -> str:
+    return (_clean_env("DANISH_ALTMOUNT_MOUNT_PATH") or "/mnt/altmount").rstrip("/")
+
+
+def _desired_altmount_import_dir() -> str:
+    return (_clean_env("DANISH_ALTMOUNT_IMPORT_DIR") or "/mnt/altmount-import").rstrip("/")
+
+
+def _desired_altmount_complete_dir() -> str:
+    return _clean_env("DANISH_ALTMOUNT_COMPLETE_DIR") or "/"
+
+
+def _desired_altmount_health_library_dir() -> str:
+    return (_clean_env("DANISH_ALTMOUNT_HEALTH_LIBRARY_DIR") or "/media").rstrip("/")
+
+
 def _delete(session: requests.Session, url: str, api_key: str) -> None:
     resp = _request(session, "DELETE", url, api_key, timeout=20)
     if resp.status_code not in (200, 202, 204, 404):
@@ -2053,8 +2073,36 @@ def _ensure_altmount_arr_management(session: requests.Session, apps: list[ArrApp
         if not isinstance(config, dict):
             raise RuntimeError("AltMount config response did not contain an object")
 
+        before_config = copy.deepcopy(config)
+        desired_mount_path = _desired_altmount_mount_path()
+        desired_import_dir = _desired_altmount_import_dir()
+        desired_complete_dir = _desired_altmount_complete_dir()
+        desired_health_library_dir = _desired_altmount_health_library_dir()
+        desired_import_strategy = _desired_altmount_import_strategy()
+
+        config["mount_path"] = desired_mount_path
+        fuse = config.setdefault("fuse", {})
+        if isinstance(fuse, dict):
+            fuse["enabled"] = True
+            fuse["mount_path"] = desired_mount_path
+
+        sabnzbd = config.setdefault("sabnzbd", {})
+        if isinstance(sabnzbd, dict):
+            sabnzbd["enabled"] = True
+            sabnzbd["complete_dir"] = desired_complete_dir
+
+        import_config = config.setdefault("import", {})
+        if isinstance(import_config, dict):
+            import_config["import_strategy"] = desired_import_strategy
+            if desired_import_strategy != "NONE":
+                import_config["import_dir"] = desired_import_dir
+
+        health = config.setdefault("health", {})
+        if isinstance(health, dict):
+            health["enabled"] = True
+            health["library_dir"] = desired_health_library_dir
+
         arrs = config.setdefault("arrs", {})
-        before = copy.deepcopy(arrs)
         arrs["enabled"] = True
         arrs["webhook_base_url"] = arrs.get("webhook_base_url") or _altmount_url()
         arrs["radarr_instances"] = radarr_instances
@@ -2062,7 +2110,7 @@ def _ensure_altmount_arr_management(session: requests.Session, apps: list[ArrApp
         for key in ("lidarr_instances", "readarr_instances", "whisparr_instances"):
             arrs.setdefault(key, [])
 
-        changed = arrs != before
+        changed = config != before_config
         if changed:
             _put_json(session, _altmount_api_url("/config", api_key), api_key, config)
             try:
@@ -2079,6 +2127,11 @@ def _ensure_altmount_arr_management(session: requests.Session, apps: list[ArrApp
         record(
             "auto_config.altmount_arrs.complete",
             changed=changed,
+            import_strategy=desired_import_strategy,
+            import_dir=desired_import_dir,
+            mount_path=desired_mount_path,
+            complete_dir=desired_complete_dir,
+            health_library_dir=desired_health_library_dir,
             radarr_instances=[_safe_altmount_instance(item) for item in radarr_instances],
             sonarr_instances=[_safe_altmount_instance(item) for item in sonarr_instances],
         )
