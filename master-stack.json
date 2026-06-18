@@ -119,7 +119,7 @@
             }
         },
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.16",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.17",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -128,7 +128,7 @@
                 "OB_API_TOKEN={Context.OldBoysToken}",
                 "OB_RID={Context.OldBoysRSS}",
                 "PROXY_API_KEY={Passwords.32}",
-                "ALTMOUNT_API_KEY={Passwords.33}",
+                "ALTMOUNT_API_KEY={Passwords.32}",
                 "PROXY_URL=http://danish-intelligence:9699",
                 "ALTMOUNT_URL=http://altmount:8080",
                 "PUID={Context.PUID}",
@@ -241,7 +241,7 @@
                 "LOG_LEVEL=warn",
                 "JWT_SECRET={Passwords.64}",
                 "ALTMOUNT_AUTH_LOGIN_REQUIRED=false",
-                "ALTMOUNT_API_KEY_OVERRIDE={Passwords.33}",
+                "ALTMOUNT_API_KEY_OVERRIDE={Passwords.32}",
                 "ALTMOUNT_MOUNT_TYPE=fuse",
                 "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
                 "ALTMOUNT_FUSE_ENABLED=true",
@@ -299,7 +299,7 @@
                 "ALTMOUNT_ARRS_CLEANUP_AUTOMATIC_IMPORT_FAILURE=false",
                 "ALTMOUNT_ARRS_QUEUE_CLEANUP_INTERVAL_SECONDS=300",
                 "ALTMOUNT_ARRS_QUEUE_CLEANUP_GRACE_PERIOD_MINUTES=10",
-                "ALTMOUNT_SABNZBD_FALLBACK_API_KEY={Passwords.33}"
+                "ALTMOUNT_SABNZBD_FALLBACK_API_KEY={Passwords.32}"
             ],
             "volumes": [
                 {
@@ -400,7 +400,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.16",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.17",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",
