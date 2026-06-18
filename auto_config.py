@@ -733,7 +733,11 @@ def _sync_prowlarr_indexers(session: requests.Session, prowlarr_url: str, prowla
 
 
 def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> int:
-    """Keep Prowlarr's preserved OldBoys indexer aligned with this install's proxy key."""
+    """Create or repair Prowlarr's OldBoys indexer for this install's proxy key."""
+    if not (_clean_env("OB_API_TOKEN") and _clean_env("OB_RID")):
+        record("auto_config.prowlarr_oldboys.skip_missing_oldboys_credentials")
+        return 0
+
     proxy_key = _clean_env("PROXY_API_KEY")
     if not proxy_key:
         record("auto_config.prowlarr_oldboys.skip_missing_proxy_key")
@@ -741,23 +745,62 @@ def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: 
 
     changed = 0
     indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
-    for indexer in indexers:
-        if _clean_name(str(indexer.get("name", ""))) != "oldboys":
-            continue
-        indexer["enable"] = True
-        _set_field(indexer, "baseUrl", f"{ARR_PROXY_URL}/ob")
-        _set_field(indexer, "apiPath", "/api")
-        _set_field(indexer, "apiKey", proxy_key)
+    oldboys = next((indexer for indexer in indexers if _clean_name(str(indexer.get("name", ""))) == "oldboys"), None)
+
+    if oldboys is None:
+        schemas = _get_json(session, f"{prowlarr_url}/api/v1/indexer/schema", prowlarr_key)
+        oldboys = copy.deepcopy(next((item for item in schemas if item.get("implementation") == "Newznab"), None))
+        if not oldboys:
+            record("auto_config.prowlarr_oldboys.create_skip_schema_missing")
+            return 0
+        oldboys.pop("id", None)
+        oldboys["name"] = "OldBoys {DK}"
+        oldboys["enable"] = True
+        oldboys["priority"] = 25
+        _set_field(oldboys, "baseUrl", f"{ARR_PROXY_URL}/ob")
+        _set_field(oldboys, "apiPath", "/api")
+        _set_field(oldboys, "apiKey", proxy_key)
         try:
-            _put_json(session, f"{prowlarr_url}/api/v1/indexer/{indexer['id']}?forceSave=true", prowlarr_key, indexer)
+            _post_json(session, f"{prowlarr_url}/api/v1/indexer?forceSave=true", prowlarr_key, oldboys)
             changed += 1
+            record("auto_config.prowlarr_oldboys.created", name="OldBoys {DK}", base_url=f"{ARR_PROXY_URL}/ob")
+        except requests.RequestException as exc:
+            record("auto_config.prowlarr_oldboys.create_failed", error=str(exc), error_type=type(exc).__name__)
+            return 0
+    else:
+        oldboys["name"] = "OldBoys {DK}"
+        oldboys["enable"] = True
+        try:
+            oldboys["priority"] = max(1, int(oldboys.get("priority") or 25))
+        except (TypeError, ValueError):
+            oldboys["priority"] = 25
+        _set_field(oldboys, "baseUrl", f"{ARR_PROXY_URL}/ob")
+        _set_field(oldboys, "apiPath", "/api")
+        _set_field(oldboys, "apiKey", proxy_key)
+        try:
+            _put_json(session, f"{prowlarr_url}/api/v1/indexer/{oldboys['id']}?forceSave=true", prowlarr_key, oldboys)
+            changed += 1
+            record("auto_config.prowlarr_oldboys.updated", indexer=oldboys.get("name"), base_url=f"{ARR_PROXY_URL}/ob")
         except requests.RequestException as exc:
             record(
                 "auto_config.prowlarr_oldboys.update_failed",
-                indexer=indexer.get("name"),
+                indexer=oldboys.get("name"),
                 error=str(exc),
                 error_type=type(exc).__name__,
             )
+
+    # Clean up duplicate OldBoys entries left by previous manual or failed runs.
+    for indexer in indexers:
+        if oldboys.get("id") and indexer.get("id") == oldboys.get("id"):
+            continue
+        if _clean_name(str(indexer.get("name", ""))) != "oldboys":
+            continue
+        try:
+            _delete(session, f"{prowlarr_url}/api/v1/indexer/{indexer['id']}", prowlarr_key)
+            changed += 1
+            record("auto_config.prowlarr_oldboys.duplicate_deleted", indexer=indexer.get("name"))
+        except requests.RequestException as exc:
+            record("auto_config.prowlarr_oldboys.duplicate_delete_failed", indexer=indexer.get("name"), error=str(exc), error_type=type(exc).__name__)
 
     if changed:
         try:
@@ -1253,13 +1296,23 @@ def _ensure_plex_libraries(session: requests.Session) -> int:
     headers = _plex_headers(token)
     try:
         prefs_url = f"{plex_url}/:/prefs"
-        prefs_response = session.put(
-            prefs_url,
-            params={"AcceptedEULA": "1"},
-            headers=headers,
-            timeout=20,
-        )
-        _raise_for_status(prefs_response, "PUT", prefs_url)
+        prefs = _plex_preferences()
+        if prefs.get("AcceptedEULA") in {"1", "true", "True"}:
+            record("auto_config.plex_libraries.eula_already_accepted")
+        else:
+            prefs_response = session.put(
+                prefs_url,
+                params={"AcceptedEULA": "1"},
+                headers=headers,
+                timeout=20,
+            )
+            if prefs_response.status_code == 403:
+                # Some claimed Plex installs reject this preference write even
+                # while the same token can manage library sections.
+                record("auto_config.plex_libraries.eula_accept_forbidden")
+            else:
+                _raise_for_status(prefs_response, "PUT", prefs_url)
+                record("auto_config.plex_libraries.eula_accepted")
 
         sections_url = f"{plex_url}/library/sections"
         response = session.get(sections_url, headers=headers, timeout=20)
@@ -2503,7 +2556,9 @@ def paint() -> dict[str, int]:
     session = requests.Session()
     prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
     record("auto_config.paint.indexers_loaded", count=len(prowlarr_indexers))
-    _ensure_prowlarr_oldboys_proxy_key(session, prowlarr_url, prowlarr_key)
+    if _ensure_prowlarr_oldboys_proxy_key(session, prowlarr_url, prowlarr_key):
+        prowlarr_indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
+        record("auto_config.paint.indexers_reloaded", count=len(prowlarr_indexers))
     apps = _wait_for_arr_apps(session, prowlarr_url, prowlarr_key)
     if not apps:
         record("auto_config.paint.no_apps")
