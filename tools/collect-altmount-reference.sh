@@ -309,7 +309,7 @@ print(f"candidate_key_count={len(keys)}")
 for path in ("/api/config", "/api/arrs/instances", "/api/arrs/health", "/api/arrs/stats", "/api/health/stats", "/api/system"):
     print(f"\n## {path}")
     data, used_key = fetch(base_url, path, keys)
-    print(f"authenticated={used_key}")
+    print(f"credential_used={'yes' if used_key else 'no'}")
     if path == "/api/config" and isinstance(data, dict):
         data = data.get("data", data)
     print(json.dumps(clean(data), indent=2, sort_keys=True)[:30000])
@@ -413,9 +413,54 @@ for c in altmount radarr sonarr danish-intelligence; do
   fi
 done'
 
+SUMMARY_FILE="$OUT/SUMMARY.txt"
+{
+  printf 'AltMount reference quick summary\n'
+  printf 'Generated: %s\n' "$TS"
+  printf 'Host: %s\n' "$HOST"
+  printf 'Archive: %s\n' "$ARCHIVE"
+  printf 'Report directory: %s\n\n' "$OUT"
+
+  printf '## AltMount Config Discovery\n'
+  if [ -r "$OUT/config/altmount-config-discovery.txt" ]; then
+    grep -E 'mount_path=|import_strategy=|import_dir=|watch_dir=|sab_complete_dir=|sab_categories=|health_enabled=|health_library_dir=|arrs_enabled=|queue_cleanup_enabled=|radarr_instances=|sonarr_instances=|provider_count=' \
+      "$OUT/config/altmount-config-discovery.txt" || true
+  else
+    printf 'missing\n'
+  fi
+
+  printf '\n## AltMount Live API Highlights\n'
+  if [ -r "$OUT/api/altmount-host-api.txt" ]; then
+    grep -E 'altmount_base_url=|candidate_key_count=|credential_used=|"import_strategy"|"import_dir"|"mount_path"|"complete_dir"|"categories"|"queue_cleanup_enabled"|"radarr_instances"|"sonarr_instances"|"webhook_base_url"|"library_dir"|"check_interval_seconds"' \
+      "$OUT/api/altmount-host-api.txt" | awk '!seen[$0]++' | head -220 || true
+  else
+    printf 'missing\n'
+  fi
+
+  printf '\n## Arr API State\n'
+  if [ -r "$OUT/api/arr-paths-and-clients.txt" ]; then
+    sed -n '1,260p' "$OUT/api/arr-paths-and-clients.txt"
+  else
+    printf 'missing\n'
+  fi
+
+  printf '\n## Important Warnings and Errors\n'
+  if [ -r "$OUT/summary/relevant-log-lines.txt" ]; then
+    grep -Ei 'importBlocked|failed|error|warn|missing article|unhealthy|repair|copy|hardlink|symlink|strm' \
+      "$OUT/summary/relevant-log-lines.txt" | tail -120 || true
+  else
+    printf 'missing\n'
+  fi
+
+  printf '\n## Report Files\n'
+  find "$OUT" -maxdepth 2 -type f -printf '%P\n' | sort
+} | redact_stream > "$SUMMARY_FILE"
+
 run_cmd summary/tree sh -c "find '$OUT' -type f -printf '%s %p\n' | sort -n"
 
 tar -czf "$ARCHIVE" -C "$(dirname "$OUT")" "$(basename "$OUT")"
 
 printf '\nCreated AltMount reference archive:\n%s\n\n' "$ARCHIVE"
+printf 'Quick summary:\n%s\n\n' "$SUMMARY_FILE"
+printf 'Print it with:\ncat %q\n\n' "$SUMMARY_FILE"
 printf 'Send that tar.gz back for review. The unpacked report is also at:\n%s\n' "$OUT"
