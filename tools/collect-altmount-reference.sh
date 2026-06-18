@@ -200,11 +200,19 @@ for raw_path in paths:
 PY
 
 if running_container altmount; then
-  run_stdin_cmd api/altmount-config docker exec -i altmount python3 - <<'PY'
+  run_stdin_cmd api/altmount-host-api python3 - <<'PY'
 import json
 import os
+import subprocess
+import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+try:
+    import yaml
+except Exception:
+    yaml = None
 
 def clean(obj):
     if isinstance(obj, dict):
@@ -219,40 +227,92 @@ def clean(obj):
         return [clean(x) for x in obj]
     return obj
 
-api_key = os.getenv("ALTMOUNT_API_KEY_OVERRIDE") or os.getenv("ALTMOUNT_API_KEY") or ""
-for item in os.environ.items():
-    if item[0].lower().endswith("api_key_override"):
-        api_key = api_key or item[1]
-url = "http://127.0.0.1:8080/api/config"
-if api_key:
-    url += "?" + urllib.parse.urlencode({"apikey": api_key})
-try:
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        data = json.loads(resp.read().decode())
-    cfg = data.get("data", data) if isinstance(data, dict) else data
-    print(json.dumps(clean(cfg), indent=2, sort_keys=True)[:30000])
-except Exception as exc:
-    print(f"altmount api config error: {type(exc).__name__}: {exc}")
-PY
-
-  run_stdin_cmd api/altmount-arrs docker exec -i altmount python3 - <<'PY'
-import json
-import os
-import urllib.parse
-import urllib.request
-
-api_key = os.getenv("ALTMOUNT_API_KEY_OVERRIDE") or os.getenv("ALTMOUNT_API_KEY") or ""
-for path in ("/api/arrs/instances", "/api/arrs/health", "/api/arrs/stats", "/api/health/stats", "/api/system"):
-    url = "http://127.0.0.1:8080" + path
-    if api_key:
-        url += "?" + urllib.parse.urlencode({"apikey": api_key})
-    print(f"\n## {path}")
+def docker_ip(name):
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-        print(json.dumps(data, indent=2, sort_keys=True)[:12000])
+        raw = subprocess.check_output(
+            ["docker", "inspect", name, "--format", "{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}"],
+            text=True,
+            timeout=10,
+        )
+        return next((line.strip() for line in raw.splitlines() if line.strip()), "")
     except Exception as exc:
-        print(f"error: {type(exc).__name__}: {exc}")
+        print(f"docker ip lookup error: {type(exc).__name__}: {exc}")
+        return ""
+
+def load_config():
+    if yaml is None:
+        return {}
+    for raw_path in (
+        "/srv/config/altmount/config.yaml",
+        "/data/appdata/altmount/config.yaml",
+        "/opt/altmount/config.yaml",
+    ):
+        p = Path(raw_path)
+        if p.is_file():
+            try:
+                return yaml.safe_load(p.read_text(errors="replace")) or {}
+            except Exception:
+                return {}
+    return {}
+
+def candidate_api_keys(obj, path=()):
+    blocked = {"provider", "providers", "nntp", "indexer", "indexers"}
+    if any(part.lower() in blocked for part in path):
+        return []
+    found = []
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            key_l = str(key).lower()
+            next_path = path + (str(key),)
+            if isinstance(value, str) and value and (
+                key_l in {"apikey", "api_key", "api-key"}
+                or ("api" in key_l and "key" in key_l)
+            ):
+                found.append(value)
+            found.extend(candidate_api_keys(value, next_path))
+    elif isinstance(obj, list):
+        for item in obj:
+            found.extend(candidate_api_keys(item, path))
+    deduped = []
+    for value in found:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped
+
+def fetch(base_url, path, keys):
+    attempts = [""]
+    attempts.extend(keys)
+    last_error = None
+    for key in attempts:
+        url = base_url + path
+        if key:
+            url += "?" + urllib.parse.urlencode({"apikey": key})
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                body = resp.read().decode("utf-8", "replace")
+            return json.loads(body), bool(key)
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+    return {"error": last_error or "request failed"}, False
+
+ip = docker_ip("altmount")
+if not ip:
+    print("altmount container IP not found")
+    raise SystemExit(0)
+
+cfg = load_config()
+keys = candidate_api_keys(cfg)
+base_url = f"http://{ip}:8080"
+print(f"altmount_base_url={base_url}")
+print(f"candidate_key_count={len(keys)}")
+
+for path in ("/api/config", "/api/arrs/instances", "/api/arrs/health", "/api/arrs/stats", "/api/health/stats", "/api/system"):
+    print(f"\n## {path}")
+    data, used_key = fetch(base_url, path, keys)
+    print(f"authenticated={used_key}")
+    if path == "/api/config" and isinstance(data, dict):
+        data = data.get("data", data)
+    print(json.dumps(clean(data), indent=2, sort_keys=True)[:30000])
 PY
 fi
 
