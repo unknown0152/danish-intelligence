@@ -461,6 +461,8 @@ run_cmd summary/tree sh -c "find '$OUT' -type f -printf '%s %p\n' | sort -n"
 tar -czf "$ARCHIVE" -C "$(dirname "$OUT")" "$(basename "$OUT")"
 
 printf '\nCreated AltMount reference archive:\n%s\n\n' "$ARCHIVE"
-printf 'Quick summary:\n%s\n\n' "$SUMMARY_FILE"
-printf 'Print it with:\ncat %q\n\n' "$SUMMARY_FILE"
-printf 'Send that tar.gz back for review. The unpacked report is also at:\n%s\n' "$OUT"
+printf 'Quick summary file:\n%s\n\n' "$SUMMARY_FILE"
+printf '%s\n' '------------------------------------------------------------'
+cat "$SUMMARY_FILE"
+printf '\n%s\n' '------------------------------------------------------------'
+printf 'Send the tar.gz back for deep review if needed. The unpacked report is at:\n%s\n' "$OUT"
