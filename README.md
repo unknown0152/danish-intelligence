@@ -293,8 +293,8 @@ For AltMount integration:
   host `danish-intelligence`, port `9699`, URL base `/altmount`.
 - The Docker-internal Danish Intelligence to AltMount API key is fixed in the
   market manifest so Cosmos cannot expand two random placeholders into
-  mismatched keys. The public Arr-facing `PROXY_API_KEY` remains random per
-  install.
+  mismatched keys. AltMount requires this override to be exactly 32 characters.
+  The public Arr-facing `PROXY_API_KEY` remains random per install.
 - If `ALTMOUNT_APIKEY` is not supplied, the `/altmount` shim adds local
   Radarr/Sonarr API credentials on the internal request to AltMount.
 
