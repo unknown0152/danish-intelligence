@@ -8,6 +8,7 @@ containers should not require.
 from __future__ import annotations
 
 import copy
+from datetime import UTC, datetime
 import json
 import os
 import re
@@ -119,6 +120,21 @@ SEERR_DB_PATHS = (
     "/seerr-config/db/db.sqlite3",
     "/app/config/db/db.sqlite3",
     "/srv/config/seerr/db/db.sqlite3",
+)
+JELLYFIN_DB_PATHS = (
+    "/jellyfin-config/data/data/jellyfin.db",
+    "/app/jellyfin-config/data/data/jellyfin.db",
+    "/srv/config/jellyfin/data/data/jellyfin.db",
+)
+JELLYFIN_API_KEY_NAME = "Danish Intelligence"
+JELLYFIN_DEFAULT_LIBRARIES = (
+    ("Movies", "movies", "/media/movies"),
+    ("Danish Movies", "movies", "/media/danish-movies"),
+    ("Documentaries", "movies", "/media/documentaries"),
+    ("TV Shows", "tvshows", "/media/tv"),
+    ("Danish TV", "tvshows", "/media/danish-tv"),
+    ("Kids Movies", "movies", "/media/kids-movies"),
+    ("Kids TV", "tvshows", "/media/kids-tv"),
 )
 SEERR_ADMIN_PASSWORD_FILE = "/config/seerr-admin-password.txt"
 SEERR_TITLE = "Danish Requests"
@@ -962,6 +978,104 @@ def _media_server_url() -> str:
     return (_clean_env("MEDIA_SERVER_URL") or default).rstrip("/")
 
 
+def _jellyfin_db_path() -> Path | None:
+    for path in JELLYFIN_DB_PATHS:
+        db = Path(path)
+        if db.exists():
+            return db
+    return None
+
+
+def _jellyfin_api_key() -> str:
+    env_key = _clean_env("JELLYFIN_API_KEY") or _clean_env("JELLYFIN_APIKEY")
+    if env_key:
+        return env_key
+
+    settings_key = str(_read_seerr_settings().get("jellyfin", {}).get("apiKey") or "").strip()
+    if settings_key:
+        return settings_key
+
+    db = _jellyfin_db_path()
+    if not db:
+        record("auto_config.jellyfin_api_key.skip_missing_db", paths=list(JELLYFIN_DB_PATHS))
+        return ""
+
+    try:
+        with sqlite3.connect(str(db), timeout=30) as conn:
+            row = conn.execute(
+                "select AccessToken from ApiKeys where Name = ? order by Id limit 1",
+                (JELLYFIN_API_KEY_NAME,),
+            ).fetchone()
+            if row and row[0]:
+                record("auto_config.jellyfin_api_key.existing", path=str(db), name=JELLYFIN_API_KEY_NAME)
+                return str(row[0])
+
+            token = secrets.token_hex(16)
+            now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            conn.execute(
+                "insert into ApiKeys (DateCreated, DateLastActivity, Name, AccessToken) values (?, ?, ?, ?)",
+                (now, now, JELLYFIN_API_KEY_NAME, token),
+            )
+            conn.commit()
+            record("auto_config.jellyfin_api_key.created", path=str(db), name=JELLYFIN_API_KEY_NAME)
+            return token
+    except sqlite3.Error as exc:
+        record("auto_config.jellyfin_api_key.failed", path=str(db), error=str(exc), error_type=type(exc).__name__)
+        return ""
+
+
+def _jellyfin_headers(api_key: str) -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "Authorization": (
+            'MediaBrowser Client="Danish Intelligence", Device="Server", '
+            f'DeviceId="danish-intelligence", Version="1.0", Token="{api_key}"'
+        ),
+    }
+
+
+def _ensure_jellyfin_libraries(session: requests.Session) -> int:
+    if _media_server_type() != "jellyfin":
+        return 0
+
+    api_key = _jellyfin_api_key()
+    if not api_key:
+        record("auto_config.jellyfin_libraries.skip_missing_key")
+        return 0
+
+    jellyfin_url = _media_server_url()
+    headers = _jellyfin_headers(api_key)
+    try:
+        response = session.get(f"{jellyfin_url}/Library/VirtualFolders", headers=headers, timeout=20)
+        response.raise_for_status()
+        existing = response.json() if response.content else []
+        existing_names = {str(item.get("Name") or "").lower() for item in existing if isinstance(item, dict)}
+        created = 0
+
+        for name, collection_type, path in JELLYFIN_DEFAULT_LIBRARIES:
+            Path(path).mkdir(parents=True, exist_ok=True)
+            if name.lower() in existing_names:
+                continue
+            params = urlencode({"name": name, "collectionType": collection_type, "refreshLibrary": "false"})
+            payload = {"LibraryOptions": {"PathInfos": [{"Path": path}]}}
+            create_response = session.post(
+                f"{jellyfin_url}/Library/VirtualFolders?{params}",
+                headers=headers,
+                json=payload,
+                timeout=30,
+            )
+            create_response.raise_for_status()
+            existing_names.add(name.lower())
+            created += 1
+
+        record("auto_config.jellyfin_libraries.complete", created=created, total=len(existing_names))
+        return created
+    except (requests.RequestException, ValueError, OSError) as exc:
+        print(f"[Core] Auto-Config: Jellyfin library setup skipped: {exc}", flush=True)
+        record("auto_config.jellyfin_libraries.failed", error=str(exc), error_type=type(exc).__name__)
+        return 0
+
+
 def _settings_host_block(url: str, default_port: int) -> tuple[str, int, bool, str]:
     parsed = urlparse(url)
     host = parsed.hostname or parsed.netloc or ""
@@ -1064,7 +1178,7 @@ def _seed_seerr_media_server_block(settings: dict[str, Any]) -> bool:
 
     if media_type == "jellyfin":
         jellyfin = settings.setdefault("jellyfin", {})
-        api_key = _clean_env("JELLYFIN_API_KEY") or _clean_env("JELLYFIN_APIKEY") or str(jellyfin.get("apiKey") or "")
+        api_key = _jellyfin_api_key() or str(jellyfin.get("apiKey") or "")
         values = {
             "name": jellyfin.get("name") or "Danish Jellyfin",
             "ip": host,
@@ -1909,14 +2023,14 @@ def _ensure_seerr_servers(session: requests.Session, apps: list[ArrApp]) -> int:
                 if bool(item.get("is4k")) is bool(payload["is4k"])
                 and str(item.get("hostname", "")).lower() == payload["hostname"].lower()
                 and int(item.get("port", 0) or 0) == int(payload["port"])
-                and item.get("activeDirectory") == root_path
-                and (item.get("activeProfileName") == profile_name or item.get("name") == payload["name"])
+                and item.get("activeDirectory") == payload["activeDirectory"]
+                and (item.get("activeProfileName") == payload["activeProfileName"] or item.get("name") == payload["name"])
             ), None)
 
             try:
                 if match:
-                    payload["id"] = match["id"]
-                    _put_json(session, f"{seerr_url}/api/v1/settings/{endpoint}/{match['id']}", seerr_key, payload)
+                    update_payload = {key: value for key, value in payload.items() if key != "id"}
+                    _put_json(session, f"{seerr_url}/api/v1/settings/{endpoint}/{match['id']}", seerr_key, update_payload)
                 else:
                     created = _post_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key, payload)
                     if isinstance(created, dict):
@@ -1924,7 +2038,7 @@ def _ensure_seerr_servers(session: requests.Session, apps: list[ArrApp]) -> int:
                 changed += 1
             except requests.RequestException as exc:
                 print(f"[Core] Auto-Config: failed to upsert Seerr {payload['name']}: {exc}", flush=True)
-                record("auto_config.seerr.upsert_failed", app=app.name, name=payload["name"], error=str(exc), error_type=type(exc).__name__)
+                record("auto_config.seerr.upsert_failed", endpoint=endpoint, name=payload["name"], error=str(exc), error_type=type(exc).__name__)
 
     record("auto_config.seerr.complete", changed=changed)
     return changed
@@ -1991,21 +2105,20 @@ def _seed_seerr_media_server_via_api(session: requests.Session, seerr_url: str, 
     if not media_type:
         return
     if media_type == "jellyfin":
-        api_key = _clean_env("JELLYFIN_API_KEY") or _clean_env("JELLYFIN_APIKEY")
+        api_key = _jellyfin_api_key()
         if not api_key:
             record("auto_config.seerr.media_server.skip_missing_jellyfin_key")
             return
         try:
-            current = _get_json(session, f"{seerr_url}/api/v1/settings/jellyfin", seerr_key)
             host, port, use_ssl, url_base = _settings_host_block(_media_server_url(), 8096)
             payload = {
-                **(current if isinstance(current, dict) else {}),
                 "ip": host,
                 "port": port,
                 "useSsl": use_ssl,
                 "urlBase": url_base,
                 "apiKey": api_key,
                 "externalHostname": _clean_env("MEDIA_SERVER_EXTERNAL_URL"),
+                "jellyfinForgotPasswordUrl": _clean_env("JELLYFIN_FORGOT_PASSWORD_URL"),
             }
             _post_json(session, f"{seerr_url}/api/v1/settings/jellyfin", seerr_key, payload)
             record("auto_config.seerr.media_server.jellyfin_complete")
@@ -2064,6 +2177,7 @@ def paint() -> dict[str, int]:
             "SEERR_ADMIN_EMAIL",
             "SEERR_ADMIN_PASSWORD",
             "SEERR_ADMIN_PASSWORD_FILE",
+            "JELLYFIN_API_KEY",
             "ENABLE_2160P_ARRS",
             "PROXY_API_KEY",
         ]),
@@ -2075,6 +2189,7 @@ def paint() -> dict[str, int]:
             "/arr-config/sonarr-2160p/config.xml",
             "/seerr-config/settings.json",
             "/seerr-config/db/db.sqlite3",
+            "/jellyfin-config/data/data/jellyfin.db",
             "/media",
             "/mnt",
         ]),
@@ -2094,7 +2209,7 @@ def paint() -> dict[str, int]:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
     _sync_prowlarr_indexers(session, prowlarr_url, prowlarr_key)
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_admin": 0, "seerr_servers": 0, "altmount_arr_instances": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_admin": 0, "seerr_servers": 0, "altmount_arr_instances": 0, "jellyfin_libraries": 0}
     for app in apps:
         record("auto_config.app.begin", app=app.name, kind=app.kind, slug=app.slug, url=app.url)
         _paint_naming(session, app)
@@ -2137,6 +2252,7 @@ def paint() -> dict[str, int]:
     _harden_prowlarr_app_sync(session, prowlarr_url, prowlarr_key)
     totals["altmount_arr_instances"] = _ensure_altmount_arr_management(session, apps)
     totals["seerr_admin"] = _ensure_seerr_admin_user()
+    totals["jellyfin_libraries"] = _ensure_jellyfin_libraries(session)
     totals["seerr_servers"] = _ensure_seerr_servers(session, apps)
     time.sleep(10)
     for app in apps:

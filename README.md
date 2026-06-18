@@ -315,6 +315,18 @@ For Seerr integration:
 - Jellyfin/Plex details come from optional installer fields or the private
   config volume. Private API keys are never stored in the market JSON.
 
+For Jellyfin integration:
+
+- The Jellyfin edition mounts Jellyfin's private config into Danish Intelligence
+  at `/jellyfin-config` so first boot can create or reuse a Jellyfin API key
+  named `Danish Intelligence`.
+- Danish Intelligence creates the clean Jellyfin libraries automatically:
+  `Movies`, `Danish Movies`, `Documentaries`, `TV Shows`, `Danish TV`,
+  `Kids Movies`, and `Kids TV`.
+- Seerr receives the same private Jellyfin API key through Seerr's API, so
+  Jellyfin login and availability checks work without storing a Jellyfin key in
+  the public market manifest.
+
 ## Permissions
 
 - The full-stack install form exposes `PUID` and `PGID`. Use the UID/GID that

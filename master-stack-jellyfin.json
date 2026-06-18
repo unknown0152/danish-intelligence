@@ -143,6 +143,11 @@
                     "type": "bind"
                 },
                 {
+                    "source": "{Context.ConfigRoot}/jellyfin",
+                    "target": "/jellyfin-config",
+                    "type": "bind"
+                },
+                {
                     "source": "{Context.MediaRoot}",
                     "target": "/media",
                     "type": "bind"
