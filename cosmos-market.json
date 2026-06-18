@@ -22,7 +22,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.11/cosmos-compose.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.12/cosmos-compose.json"
     },
     {
       "id": "prowlarr-danish-prerequisite",
@@ -43,7 +43,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.11/prowlarr-prereq.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.12/prowlarr-prereq.json"
     },
     {
       "id": "altmount-danish",
@@ -64,7 +64,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.11/altmount-v2.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.12/altmount-v2.json"
     },
     {
       "id": "danish-master-stack-plex",
@@ -89,7 +89,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.11/master-stack.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.12/master-stack.json"
     },
     {
       "id": "danish-master-stack-jellyfin",
@@ -114,7 +114,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.11/master-stack-jellyfin.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.12/master-stack-jellyfin.json"
     },
     {
       "id": "danish-2160p-arrs-addon",
@@ -138,7 +138,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.11/arrs-2160p-addon.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.12/arrs-2160p-addon.json"
     }
   ]
 }

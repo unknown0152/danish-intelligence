@@ -136,8 +136,12 @@ JELLYFIN_DEFAULT_LIBRARIES = (
     ("Movies", "movies", "/media/movies"),
     ("Danish Movies", "movies", "/media/danish-movies"),
     ("Documentaries", "movies", "/media/documentaries"),
+    ("Christmas Movies", "movies", "/media/christmas-movies"),
+    ("Classics", "movies", "/media/classics"),
     ("TV Shows", "tvshows", "/media/tv"),
     ("Danish TV", "tvshows", "/media/danish-tv"),
+    ("Documentary Series", "tvshows", "/media/documentary-series"),
+    ("Christmas TV", "tvshows", "/media/christmas-tv"),
     ("Kids Movies", "movies", "/media/kids-movies"),
     ("Kids TV", "tvshows", "/media/kids-tv"),
 )
@@ -154,8 +158,12 @@ PLEX_DEFAULT_LIBRARIES = (
     ("Movies", "movie", "/media/movies"),
     ("Danish Movies", "movie", "/media/danish-movies"),
     ("Documentaries", "movie", "/media/documentaries"),
+    ("Christmas Movies", "movie", "/media/christmas-movies"),
+    ("Classics", "movie", "/media/classics"),
     ("TV Shows", "show", "/media/tv"),
     ("Danish TV", "show", "/media/danish-tv"),
+    ("Documentary Series", "show", "/media/documentary-series"),
+    ("Christmas TV", "show", "/media/christmas-tv"),
     ("Kids Movies", "movie", "/media/kids-movies"),
     ("Kids TV", "show", "/media/kids-tv"),
 )
@@ -171,12 +179,16 @@ SEERR_DEFAULT_MOVIE_ROOTS = (
     ("Kids Movies - Danish Audio", "/media/kids-movies", "audio", False),
     ("Danish Movies - Danish Audio", "/media/danish-movies", "audio", False),
     ("Documentaries - Danish Subtitles", "/media/documentaries", "subtitles", False),
+    ("Christmas Movies - Danish Audio", "/media/christmas-movies", "audio", False),
+    ("Classics - Danish Audio", "/media/classics", "audio", False),
 )
 SEERR_DEFAULT_TV_ROOTS = (
     ("TV - Danish Subtitles", "/media/tv", "subtitles", True),
     ("TV - Danish Audio", "/media/tv", "audio", False),
     ("Kids TV - Danish Audio", "/media/kids-tv", "audio", False),
     ("Danish TV - Danish Audio", "/media/danish-tv", "audio", False),
+    ("Documentary Series - Danish Subtitles", "/media/documentary-series", "subtitles", False),
+    ("Christmas TV - Danish Audio", "/media/christmas-tv", "audio", False),
 )
 SEERR_2160P_MOVIE_ROOTS = (
     ("Movies 2160p - Danish Subtitles", "/media/movies-2160p", "subtitles", True),
@@ -1867,8 +1879,21 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
         radarr_paths = ["/media/movies-2160p"]
         sonarr_paths = ["/media/tv-2160p"]
     else:
-        radarr_paths = ["/media/movies", "/media/kids-movies", "/media/danish-movies", "/media/documentaries"]
-        sonarr_paths = ["/media/tv", "/media/kids-tv", "/media/danish-tv"]
+        radarr_paths = [
+            "/media/movies",
+            "/media/kids-movies",
+            "/media/danish-movies",
+            "/media/documentaries",
+            "/media/christmas-movies",
+            "/media/classics",
+        ]
+        sonarr_paths = [
+            "/media/tv",
+            "/media/kids-tv",
+            "/media/danish-tv",
+            "/media/documentary-series",
+            "/media/christmas-tv",
+        ]
     
     target_paths = radarr_paths if app.kind == "Radarr" else sonarr_paths
     added = 0

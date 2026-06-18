@@ -102,8 +102,12 @@ The full-stack editions create this media/library shape:
 /media/movies
 /media/danish-movies
 /media/documentaries
+/media/christmas-movies
+/media/classics
 /media/tv
 /media/danish-tv
+/media/documentary-series
+/media/christmas-tv
 /media/kids-movies
 /media/kids-tv
 /media/movies-2160p        optional add-on
@@ -111,9 +115,11 @@ The full-stack editions create this media/library shape:
 ```
 
 Radarr uses `/media/movies`, `/media/danish-movies`, `/media/documentaries`,
-and `/media/kids-movies`. Sonarr uses `/media/tv`, `/media/danish-tv`, and
-`/media/kids-tv`. Jellyfin or Plex gets matching libraries, and Seerr receives
-matching movie/TV root-folder choices. With the 2160p add-on, Radarr 2160p uses
+`/media/christmas-movies`, `/media/classics`, and `/media/kids-movies`. Sonarr
+uses `/media/tv`, `/media/danish-tv`, `/media/documentary-series`,
+`/media/christmas-tv`, and `/media/kids-tv`. Jellyfin or Plex gets matching
+libraries, and Seerr receives matching movie/TV root-folder choices. With the
+2160p add-on, Radarr 2160p uses
 `/media/movies-2160p`, Sonarr 2160p uses `/media/tv-2160p`, and the media
 server gets matching `Movies 2160p` and `TV Shows 2160p` libraries.
 
@@ -338,7 +344,7 @@ For AltMount integration:
 - The full stack pins the native AltMount layout used by the Arrs:
   mount type `fuse`, mount path `/mnt/altmount`, symlink import directory
   `/mnt/altmount-import`, SAB complete dir `/`, and metadata under
-  `/config/metadata`.
+  `/metadata`.
 - AltMount uses `SYMLINK` import strategy by default. Radarr/Sonarr import from
   `/mnt/altmount-import/<category>/...`, while each symlink targets the native
   FUSE content under `/mnt/altmount`. This avoids full file copies through the

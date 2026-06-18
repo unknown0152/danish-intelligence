@@ -29,6 +29,13 @@
                 "initialValue": "{Passwords.32}",
                 "type": "text",
                 "required": true
+            },
+            {
+                "name": "AltMountKey",
+                "label": "AltMount API Key",
+                "initialValue": "{Passwords.32}",
+                "type": "text",
+                "required": true
             }
         ]
     },
@@ -44,6 +51,7 @@
                 "PORT=8080",
                 "LOG_LEVEL=warn",
                 "JWT_SECRET={Context.JWTSecret}",
+                "ALTMOUNT_API_KEY_OVERRIDE={Context.AltMountKey}",
                 "ALTMOUNT_AUTH_LOGIN_REQUIRED=false",
                 "ALTMOUNT_MOUNT_PATH=/mnt/altmount",
                 "ALTMOUNT_SABNZBD_COMPLETE_DIR=/",
