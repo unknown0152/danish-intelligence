@@ -113,6 +113,28 @@ SEERR_CONFIG_PATHS = (
     "/app/config/settings.json",
     "/srv/config/seerr/settings.json",
 )
+SEERR_TITLE = "Danish Requests"
+SEERR_DEFAULT_MOVIE_ROOTS = (
+    ("Movies - Danish Subtitles", "/media/movies", "subtitles", True),
+    ("Movies - Danish Audio", "/media/movies", "audio", False),
+    ("Kids Movies - Danish Audio", "/media/kids-movies", "audio", False),
+    ("Danish Movies - Danish Audio", "/media/danish-movies", "audio", False),
+    ("Documentaries - Danish Subtitles", "/media/documentaries", "subtitles", False),
+)
+SEERR_DEFAULT_TV_ROOTS = (
+    ("TV - Danish Subtitles", "/media/tv", "subtitles", True),
+    ("TV - Danish Audio", "/media/tv", "audio", False),
+    ("Kids TV - Danish Audio", "/media/kids-tv", "audio", False),
+    ("Danish TV - Danish Audio", "/media/danish-tv", "audio", False),
+)
+SEERR_2160P_MOVIE_ROOTS = (
+    ("Movies 2160p - Danish Subtitles", "/media/movies-2160p", "subtitles", True),
+    ("Movies 2160p - Danish Audio", "/media/movies-2160p", "audio", False),
+)
+SEERR_2160P_TV_ROOTS = (
+    ("TV 2160p - Danish Subtitles", "/media/tv-2160p", "subtitles", True),
+    ("TV 2160p - Danish Audio", "/media/tv-2160p", "audio", False),
+)
 
 
 @dataclass
@@ -771,6 +793,201 @@ def _seerr_api_key() -> str:
     return ""
 
 
+def _seerr_url() -> str:
+    return _clean_env("SEERR_URL").rstrip("/") or "http://seerr:5055"
+
+
+def _seerr_config_path() -> Path | None:
+    first_candidate = Path(SEERR_CONFIG_PATHS[0])
+    for path in SEERR_CONFIG_PATHS:
+        cfg = Path(path)
+        if cfg.exists():
+            return cfg
+    for path in SEERR_CONFIG_PATHS:
+        cfg = Path(path)
+        if cfg.parent.exists():
+            return cfg
+    return first_candidate if first_candidate.parent.exists() else None
+
+
+def _read_seerr_settings() -> dict[str, Any]:
+    cfg = _seerr_config_path()
+    if not cfg or not cfg.exists():
+        return {}
+    try:
+        return json.loads(cfg.read_text())
+    except Exception as exc:
+        record("auto_config.seerr_settings.read_failed", path=str(cfg), error=str(exc), error_type=type(exc).__name__)
+        return {}
+
+
+def _write_seerr_settings(settings: dict[str, Any]) -> bool:
+    cfg = _seerr_config_path()
+    if not cfg:
+        record("auto_config.seerr_settings.write_skipped", reason="missing_parent")
+        return False
+    try:
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cfg.with_suffix(cfg.suffix + ".tmp")
+        tmp.write_text(json.dumps(settings, indent=2) + "\n")
+        tmp.replace(cfg)
+        record("auto_config.seerr_settings.written", path=str(cfg))
+        return True
+    except OSError as exc:
+        record("auto_config.seerr_settings.write_failed", path=str(cfg), error=str(exc), error_type=type(exc).__name__)
+        return False
+
+
+def _media_server_type() -> str:
+    value = _clean_env("MEDIA_SERVER_TYPE").lower().strip()
+    return value if value in {"plex", "jellyfin"} else ""
+
+
+def _media_server_url() -> str:
+    media_type = _media_server_type()
+    default = "http://jellyfin:8096" if media_type == "jellyfin" else "http://plex:32400"
+    return (_clean_env("MEDIA_SERVER_URL") or default).rstrip("/")
+
+
+def _settings_host_block(url: str, default_port: int) -> tuple[str, int, bool, str]:
+    parsed = urlparse(url)
+    host = parsed.hostname or parsed.netloc or ""
+    port = int(parsed.port or (443 if parsed.scheme == "https" else default_port))
+    use_ssl = parsed.scheme == "https"
+    url_base = parsed.path.rstrip("/")
+    return host, port, use_ssl, url_base
+
+
+def _seed_seerr_settings_file() -> bool:
+    settings = _read_seerr_settings()
+    if not settings:
+        api_key = _clean_env("SEERR_API_KEY") or os.urandom(16).hex()
+        settings = {
+            "public": {"initialized": True},
+            "main": {
+                "apiKey": api_key,
+                "applicationTitle": SEERR_TITLE,
+                "applicationUrl": _clean_env("SEERR_APPLICATION_URL") or _clean_env("SEERR_EXTERNAL_URL"),
+                "cacheImages": True,
+                "defaultPermissions": 48,
+                "defaultQuotas": {"movie": {}, "tv": {}},
+                "hideAvailable": False,
+                "hideBlocklisted": False,
+                "localLogin": True,
+                "mediaServerLogin": True,
+                "newPlexLogin": False,
+                "discoverRegion": "",
+                "streamingRegion": "DK",
+                "originalLanguage": "da|en",
+                "blocklistRegion": "",
+                "blocklistLanguage": "",
+                "blocklistedTags": "",
+                "blocklistedTagsLimit": 50,
+                "mediaServerType": 2 if _media_server_type() == "jellyfin" else 1,
+                "partialRequestsEnabled": True,
+                "enableSpecialEpisodes": False,
+                "locale": "en",
+                "youtubeUrl": "",
+            },
+            "plex": {"name": "", "ip": "", "port": 32400, "useSsl": False, "libraries": []},
+            "jellyfin": {
+                "name": "",
+                "ip": "",
+                "port": 8096,
+                "useSsl": False,
+                "urlBase": "",
+                "externalHostname": "",
+                "jellyfinForgotPasswordUrl": "",
+                "libraries": [],
+                "serverId": "",
+                "apiKey": "",
+            },
+            "radarr": [],
+            "sonarr": [],
+        }
+
+    public = settings.setdefault("public", {})
+    main = settings.setdefault("main", {})
+    changed = False
+
+    if not public.get("initialized"):
+        public["initialized"] = True
+        changed = True
+    for key, value in {
+        "applicationTitle": SEERR_TITLE,
+        "cacheImages": True,
+        "defaultPermissions": 48,
+        "streamingRegion": "DK",
+        "originalLanguage": "da|en",
+        "localLogin": True,
+        "mediaServerLogin": True,
+        "newPlexLogin": False,
+    }.items():
+        if main.get(key) != value:
+            main[key] = value
+            changed = True
+
+    media_type = _media_server_type()
+    if media_type:
+        wanted_type = 2 if media_type == "jellyfin" else 1
+        if main.get("mediaServerType") != wanted_type:
+            main["mediaServerType"] = wanted_type
+            changed = True
+
+    if _seed_seerr_media_server_block(settings):
+        changed = True
+
+    return _write_seerr_settings(settings) if changed or not _seerr_config_path() or not _seerr_config_path().exists() else True
+
+
+def _seed_seerr_media_server_block(settings: dict[str, Any]) -> bool:
+    media_type = _media_server_type()
+    if not media_type:
+        return False
+
+    host, port, use_ssl, url_base = _settings_host_block(_media_server_url(), 8096 if media_type == "jellyfin" else 32400)
+    external = _clean_env("MEDIA_SERVER_EXTERNAL_URL")
+    changed = False
+
+    if media_type == "jellyfin":
+        jellyfin = settings.setdefault("jellyfin", {})
+        api_key = _clean_env("JELLYFIN_API_KEY") or _clean_env("JELLYFIN_APIKEY") or str(jellyfin.get("apiKey") or "")
+        values = {
+            "name": jellyfin.get("name") or "Danish Jellyfin",
+            "ip": host,
+            "port": port,
+            "useSsl": use_ssl,
+            "urlBase": url_base,
+            "externalHostname": external or str(jellyfin.get("externalHostname") or ""),
+            "jellyfinForgotPasswordUrl": str(jellyfin.get("jellyfinForgotPasswordUrl") or ""),
+            "libraries": jellyfin.get("libraries") or [],
+            "serverId": str(jellyfin.get("serverId") or ""),
+            "apiKey": api_key,
+        }
+        for key, value in values.items():
+            if jellyfin.get(key) != value:
+                jellyfin[key] = value
+                changed = True
+    elif media_type == "plex":
+        plex = settings.setdefault("plex", {})
+        values = {
+            "name": _clean_env("PLEX_SERVER_NAME") or str(plex.get("name") or "Danish Plex"),
+            "machineId": _clean_env("PLEX_MACHINE_ID") or str(plex.get("machineId") or ""),
+            "ip": host,
+            "port": port,
+            "useSsl": use_ssl,
+            "libraries": plex.get("libraries") or [],
+        }
+        web_app_url = _clean_env("PLEX_WEB_APP_URL")
+        if web_app_url:
+            values["webAppUrl"] = web_app_url
+        for key, value in values.items():
+            if plex.get(key) != value:
+                plex[key] = value
+                changed = True
+    return changed
+
+
 def _arr_reachable(session: requests.Session, url: str, api_key: str) -> bool:
     try:
         resp = _request(session, "GET", f"{url.rstrip('/')}/api/v3/system/status", api_key, timeout=8)
@@ -1218,8 +1435,8 @@ def _ensure_root_folders(session: requests.Session, app: ArrApp) -> int:
         radarr_paths = ["/media/movies-2160p"]
         sonarr_paths = ["/media/tv-2160p"]
     else:
-        radarr_paths = ["/media/movies", "/media/kids-movies"]
-        sonarr_paths = ["/media/tv", "/media/kids-tv"]
+        radarr_paths = ["/media/movies", "/media/kids-movies", "/media/danish-movies", "/media/documentaries"]
+        sonarr_paths = ["/media/tv", "/media/kids-tv", "/media/danish-tv"]
     
     target_paths = radarr_paths if app.kind == "Radarr" else sonarr_paths
     added = 0
@@ -1472,19 +1689,23 @@ def _seerr_server_url(app: ArrApp) -> str:
     return urlunparse((parsed.scheme or "http", parsed.netloc, base_url, "", "", ""))
 
 
-def _seerr_base_payload(app: ArrApp, profile_name: str, profile_id: int, root_path: str, is_default: bool) -> dict[str, Any]:
+def _seerr_external_url(app: ArrApp) -> str:
+    prefix = _env_prefix(app.slug)
+    return (
+        _clean_env(f"{prefix}_EXTERNAL_URL")
+        or _clean_env(f"{app.kind.upper()}_EXTERNAL_URL")
+        or ""
+    ).rstrip("/")
+
+
+def _seerr_base_payload(app: ArrApp, name: str, profile_name: str, profile_id: int, root_path: str, is_default: bool) -> dict[str, Any]:
     parsed = urlparse(app.url)
     hostname = parsed.hostname or app.slug
     port = parsed.port or (443 if parsed.scheme == "https" else (8989 if app.kind == "Sonarr" else 7878))
     base_url = parsed.path.rstrip("/")
-    label = "Movies" if app.kind == "Radarr" else "TV"
-    if "audio" in profile_name.lower():
-        label = f"{label} 2160p - Danish Audio"
-    else:
-        label = f"{label} 2160p - Danish Subtitles"
 
     payload: dict[str, Any] = {
-        "name": label,
+        "name": name,
         "hostname": hostname,
         "port": port,
         "apiKey": app.api_key,
@@ -1494,9 +1715,9 @@ def _seerr_base_payload(app: ArrApp, profile_name: str, profile_id: int, root_pa
         "activeProfileId": profile_id,
         "activeProfileName": profile_name,
         "activeDirectory": root_path,
-        "is4k": True,
+        "is4k": _is_2160p_instance(app.name, app.url),
         "isDefault": is_default,
-        "externalUrl": "",
+        "externalUrl": _seerr_external_url(app),
         "syncEnabled": True,
         "preventSearch": False,
         "tagRequests": False,
@@ -1514,64 +1735,183 @@ def _seerr_base_payload(app: ArrApp, profile_name: str, profile_id: int, root_pa
     return payload
 
 
-def _ensure_seerr_2160p_servers(session: requests.Session, app: ArrApp) -> int:
-    if not _truthy_env("ENABLE_2160P_ARRS") or not _is_2160p_instance(app.name, app.url):
-        return 0
+def _seerr_targets(app: ArrApp) -> tuple[tuple[str, str, str, bool], ...]:
+    if app.kind == "Radarr":
+        return SEERR_2160P_MOVIE_ROOTS if _is_2160p_instance(app.name, app.url) else SEERR_DEFAULT_MOVIE_ROOTS
+    return SEERR_2160P_TV_ROOTS if _is_2160p_instance(app.name, app.url) else SEERR_DEFAULT_TV_ROOTS
 
-    record("auto_config.seerr_2160p.begin", app=app.name, kind=app.kind)
+
+def _seerr_profile_name(app: ArrApp, profile_kind: str) -> str:
+    audio_profile, subtitles_profile = _danish_profile_names(app)
+    return audio_profile if profile_kind == "audio" else subtitles_profile
+
+
+def _seerr_is_api_ready(session: requests.Session, seerr_url: str, seerr_key: str) -> bool:
+    try:
+        public = _get_json(session, f"{seerr_url}/api/v1/settings/public", seerr_key)
+        if isinstance(public, dict) and public.get("initialized"):
+            return True
+    except requests.RequestException as exc:
+        record("auto_config.seerr.public_failed", error=str(exc), error_type=type(exc).__name__)
+        return False
+
+    seeded = _seed_seerr_settings_file()
+    record("auto_config.seerr.seeded_settings", seeded=seeded)
+    return False
+
+
+def _ensure_seerr_servers(session: requests.Session, apps: list[ArrApp]) -> int:
+    record("auto_config.seerr.begin", apps=[app.name for app in apps])
     seerr_key = _seerr_api_key()
     if not seerr_key:
-        print("[Core] Auto-Config: Seerr API key unavailable; 2160p Seerr entries skipped", flush=True)
-        record("auto_config.seerr_2160p.skip_missing_key", app=app.name)
+        if _seed_seerr_settings_file():
+            seerr_key = _seerr_api_key()
+    if not seerr_key:
+        print("[Core] Auto-Config: Seerr API key unavailable; Seerr entries skipped", flush=True)
+        record("auto_config.seerr.skip_missing_key")
         return 0
 
-    seerr_url = os.getenv("SEERR_URL", "http://seerr:5055").rstrip("/")
-    endpoint = "radarr" if app.kind == "Radarr" else "sonarr"
-    root_path = "/media/movies-2160p" if app.kind == "Radarr" else "/media/tv-2160p"
-    audio_profile, subtitles_profile = _danish_profile_names(app)
-    wanted = (
-        (subtitles_profile, True),
-        (audio_profile, False),
-    )
+    seerr_url = _seerr_url()
+    payloads = _build_seerr_payloads(session, apps)
+    if not _seerr_is_api_ready(session, seerr_url, seerr_key):
+        return _write_seerr_servers_to_file(payloads, needs_restart=True)
 
-    try:
-        existing = _get_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key)
-    except requests.RequestException as exc:
-        print(f"[Core] Auto-Config: Seerr {endpoint} settings unavailable; 2160p entries skipped: {exc}", flush=True)
-        record("auto_config.seerr_2160p.settings_failed", app=app.name, endpoint=endpoint, error=str(exc), error_type=type(exc).__name__)
-        return 0
-
+    _seed_seerr_media_server_via_api(session, seerr_url, seerr_key)
     changed = 0
-    for profile_name, is_default in wanted:
-        profile_id = _profile_id_by_name(session, app, profile_name)
-        if profile_id is None:
-            print(f"[Core] Auto-Config: {app.name} profile {profile_name} unavailable; Seerr entry skipped", flush=True)
-            record("auto_config.seerr_2160p.profile_missing", app=app.name, profile=profile_name)
-            continue
+    try:
+        existing_by_endpoint = {
+            "radarr": _get_json(session, f"{seerr_url}/api/v1/settings/radarr", seerr_key),
+            "sonarr": _get_json(session, f"{seerr_url}/api/v1/settings/sonarr", seerr_key),
+        }
+    except requests.RequestException as exc:
+        print(f"[Core] Auto-Config: Seerr API locked; writing Seerr settings file instead: {exc}", flush=True)
+        record("auto_config.seerr.settings_failed", error=str(exc), error_type=type(exc).__name__)
+        return _write_seerr_servers_to_file(payloads, needs_restart=True)
 
-        payload = _seerr_base_payload(app, profile_name, profile_id, root_path, is_default)
-        match = next((
-            item for item in existing
-            if bool(item.get("is4k")) is True
-            and str(item.get("hostname", "")).lower() == payload["hostname"].lower()
-            and int(item.get("port", 0) or 0) == int(payload["port"])
-            and item.get("activeDirectory") == root_path
-            and (item.get("activeProfileName") == profile_name or item.get("name") == payload["name"])
-        ), None)
+    for endpoint, endpoint_payloads in payloads.items():
+        existing = existing_by_endpoint.get(endpoint) or []
+        for payload in endpoint_payloads:
+            match = next((
+                item for item in existing
+                if bool(item.get("is4k")) is bool(payload["is4k"])
+                and str(item.get("hostname", "")).lower() == payload["hostname"].lower()
+                and int(item.get("port", 0) or 0) == int(payload["port"])
+                and item.get("activeDirectory") == root_path
+                and (item.get("activeProfileName") == profile_name or item.get("name") == payload["name"])
+            ), None)
 
-        try:
-            if match:
-                payload["id"] = match["id"]
-                _put_json(session, f"{seerr_url}/api/v1/settings/{endpoint}/{match['id']}", seerr_key, payload)
-            else:
-                _post_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key, payload)
-            changed += 1
-        except requests.RequestException as exc:
-            print(f"[Core] Auto-Config: failed to upsert Seerr {payload['name']}: {exc}", flush=True)
-            record("auto_config.seerr_2160p.upsert_failed", app=app.name, name=payload["name"], error=str(exc), error_type=type(exc).__name__)
+            try:
+                if match:
+                    payload["id"] = match["id"]
+                    _put_json(session, f"{seerr_url}/api/v1/settings/{endpoint}/{match['id']}", seerr_key, payload)
+                else:
+                    created = _post_json(session, f"{seerr_url}/api/v1/settings/{endpoint}", seerr_key, payload)
+                    if isinstance(created, dict):
+                        existing.append(created)
+                changed += 1
+            except requests.RequestException as exc:
+                print(f"[Core] Auto-Config: failed to upsert Seerr {payload['name']}: {exc}", flush=True)
+                record("auto_config.seerr.upsert_failed", app=app.name, name=payload["name"], error=str(exc), error_type=type(exc).__name__)
 
-    record("auto_config.seerr_2160p.complete", app=app.name, changed=changed)
+    record("auto_config.seerr.complete", changed=changed)
     return changed
+
+
+def _build_seerr_payloads(session: requests.Session, apps: list[ArrApp]) -> dict[str, list[dict[str, Any]]]:
+    payloads: dict[str, list[dict[str, Any]]] = {"radarr": [], "sonarr": []}
+    for app in apps:
+        endpoint = "radarr" if app.kind == "Radarr" else "sonarr"
+        for name, root_path, profile_kind, is_default in _seerr_targets(app):
+            profile_name = _seerr_profile_name(app, profile_kind)
+            profile_id = _profile_id_by_name(session, app, profile_name)
+            if profile_id is None:
+                print(f"[Core] Auto-Config: {app.name} profile {profile_name} unavailable; Seerr entry skipped", flush=True)
+                record("auto_config.seerr.profile_missing", app=app.name, profile=profile_name)
+                continue
+            payloads[endpoint].append(_seerr_base_payload(app, name, profile_name, profile_id, root_path, is_default))
+    return payloads
+
+
+def _write_seerr_servers_to_file(payloads: dict[str, list[dict[str, Any]]], needs_restart: bool) -> int:
+    settings = _read_seerr_settings()
+    if not settings:
+        _seed_seerr_settings_file()
+        settings = _read_seerr_settings()
+    settings.setdefault("public", {})["initialized"] = True
+    settings.setdefault("main", {}).update({
+        "applicationTitle": SEERR_TITLE,
+        "cacheImages": True,
+        "defaultPermissions": 48,
+        "streamingRegion": "DK",
+        "originalLanguage": "da|en",
+        "localLogin": True,
+        "mediaServerLogin": True,
+        "newPlexLogin": False,
+    })
+    _seed_seerr_media_server_block(settings)
+
+    total = 0
+    for endpoint in ("radarr", "sonarr"):
+        items = []
+        for item_id, payload in enumerate(payloads.get(endpoint, [])):
+            item = copy.deepcopy(payload)
+            item["id"] = item_id
+            items.append(item)
+        settings[endpoint] = items
+        total += len(items)
+
+    if not _write_seerr_settings(settings):
+        return 0
+    if needs_restart:
+        print("[Core] Auto-Config: Seerr settings file updated; restart Seerr once to load protected settings", flush=True)
+    record(
+        "auto_config.seerr.file_complete",
+        radarr=len(settings.get("radarr") or []),
+        sonarr=len(settings.get("sonarr") or []),
+        needs_restart=needs_restart,
+    )
+    return total
+
+
+def _seed_seerr_media_server_via_api(session: requests.Session, seerr_url: str, seerr_key: str) -> None:
+    media_type = _media_server_type()
+    if not media_type:
+        return
+    if media_type == "jellyfin":
+        api_key = _clean_env("JELLYFIN_API_KEY") or _clean_env("JELLYFIN_APIKEY")
+        if not api_key:
+            record("auto_config.seerr.media_server.skip_missing_jellyfin_key")
+            return
+        try:
+            current = _get_json(session, f"{seerr_url}/api/v1/settings/jellyfin", seerr_key)
+            host, port, use_ssl, url_base = _settings_host_block(_media_server_url(), 8096)
+            payload = {
+                **(current if isinstance(current, dict) else {}),
+                "ip": host,
+                "port": port,
+                "useSsl": use_ssl,
+                "urlBase": url_base,
+                "apiKey": api_key,
+                "externalHostname": _clean_env("MEDIA_SERVER_EXTERNAL_URL"),
+            }
+            _post_json(session, f"{seerr_url}/api/v1/settings/jellyfin", seerr_key, payload)
+            record("auto_config.seerr.media_server.jellyfin_complete")
+        except requests.RequestException as exc:
+            record("auto_config.seerr.media_server.jellyfin_failed", error=str(exc), error_type=type(exc).__name__)
+    elif media_type == "plex":
+        try:
+            current = _get_json(session, f"{seerr_url}/api/v1/settings/plex", seerr_key)
+            host, port, use_ssl, _url_base = _settings_host_block(_media_server_url(), 32400)
+            payload = {
+                **(current if isinstance(current, dict) else {}),
+                "ip": host,
+                "port": port,
+                "useSsl": use_ssl,
+            }
+            _post_json(session, f"{seerr_url}/api/v1/settings/plex", seerr_key, payload)
+            record("auto_config.seerr.media_server.plex_complete")
+        except requests.RequestException as exc:
+            record("auto_config.seerr.media_server.plex_failed", error=str(exc), error_type=type(exc).__name__)
 
 
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
@@ -1647,7 +1987,7 @@ def paint() -> dict[str, int]:
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
         download_clients = _ensure_download_client(session, app)
         webhooks = _ensure_marker_webhook(session, app)
-        seerr_servers = _ensure_seerr_2160p_servers(session, app)
+        seerr_servers = 0
         totals["apps"] += 1
         totals["root_folders"] += root_folders
         totals["custom_formats"] += cf_count
@@ -1679,6 +2019,7 @@ def paint() -> dict[str, int]:
 
     _harden_prowlarr_app_sync(session, prowlarr_url, prowlarr_key)
     totals["altmount_arr_instances"] = _ensure_altmount_arr_management(session, apps)
+    totals["seerr_servers"] = _ensure_seerr_servers(session, apps)
     time.sleep(10)
     for app in apps:
         _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)

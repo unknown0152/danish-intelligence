@@ -47,6 +47,24 @@
                 "initialValue": "1001",
                 "type": "text",
                 "required": true
+            },
+            {
+                "name": "MediaServerExternalUrl",
+                "label": "Media Server External URL (optional)",
+                "type": "text",
+                "required": false
+            },
+            {
+                "name": "PlexServerName",
+                "label": "Plex Server Name (optional)",
+                "type": "text",
+                "required": false
+            },
+            {
+                "name": "PlexMachineId",
+                "label": "Plex Machine ID (optional)",
+                "type": "text",
+                "required": false
             }
         ]
     },
@@ -76,7 +94,10 @@
                 "INSTALL_DEBUG_FILE=/config/install-debug.jsonl",
                 "INSTALL_DEBUG_SNAPSHOT=/config/install-debug-latest.json",
                 "LISTEN_PORT=9699",
-                "LISTEN_HOST=0.0.0.0"
+                "LISTEN_HOST=0.0.0.0",
+                "MEDIA_SERVER_EXTERNAL_URL={Context.MediaServerExternalUrl}",
+                "PLEX_SERVER_NAME={Context.PlexServerName}",
+                "PLEX_MACHINE_ID={Context.PlexMachineId}"
             ],
             "labels": {
                 "cosmos-auto-update": "true",
@@ -110,8 +131,7 @@
                 {
                     "source": "{Context.ConfigRoot}/seerr",
                     "target": "/seerr-config",
-                    "type": "bind",
-                    "read_only": true
+                    "type": "bind"
                 },
                 {
                     "source": "{Context.MediaRoot}",
@@ -121,6 +141,9 @@
             ],
             "networks": {
                 "media-stack": {}
+            },
+            "depends_on": {
+                "seerr": {}
             }
         },
         "altmount": {
@@ -269,6 +292,33 @@
                 "media-stack": {}
             }
         },
+        "seerr-bootstrap": {
+            "image": "ghcr.io/unknown0152/danish-intelligence:latest",
+            "container_name": "seerr-bootstrap",
+            "restart": "no",
+            "command": "python3 /app/tools/seerr_bootstrap.py",
+            "environment": [
+                "SEERR_SETTINGS_PATH=/seerr-config/settings.json",
+                "MEDIA_SERVER_TYPE=plex",
+                "MEDIA_SERVER_URL=http://plex:32400",
+                "MEDIA_SERVER_EXTERNAL_URL={Context.MediaServerExternalUrl}",
+                "PLEX_SERVER_NAME={Context.PlexServerName}",
+                "PLEX_MACHINE_ID={Context.PlexMachineId}"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/seerr",
+                    "target": "/seerr-config",
+                    "type": "bind"
+                }
+            ],
+            "networks": {
+                "media-stack": {}
+            },
+            "labels": {
+                "cosmos-force-network-secured": "true"
+            }
+        },
         "seerr": {
             "image": "ghcr.io/seerr-team/seerr:latest",
             "container_name": "seerr",
@@ -294,6 +344,9 @@
             },
             "networks": {
                 "media-stack": {}
+            },
+            "depends_on": {
+                "seerr-bootstrap": {}
             }
         },
         "radarr": {

@@ -61,8 +61,8 @@ Only the selected media server is deployed. The full-stack installer also has
 an optional `Install separate 2160p Radarr and Sonarr` checkbox. When enabled,
 it adds `radarr-2160p` and `sonarr-2160p`, registers them in Prowlarr when
 reachable, paints them with separate 2160p root folders, and adds matching
-2160p Radarr/Sonarr server entries to Seerr when Seerr has already generated
-its API key. Optional 2160p Arrs get explicit `Danish Audio 2160p` and
+2160p Radarr/Sonarr server entries to Seerr. Optional 2160p Arrs get explicit
+`Danish Audio 2160p` and
 `Danish Subtitles 2160p` quality profiles with only 2160p qualities enabled,
 and they use their own AltMount SAB categories (`movies-2160p` and
 `tv-2160p`) so queue/history entries stay separate from standard `movies` and
@@ -299,11 +299,14 @@ For Seerr integration:
 - The full stack deploys Seerr as `http://seerr:5055`.
 - Seerr keeps its private state in `/app/config`, backed by
   `{Context.ConfigRoot}/seerr`.
-- Danish Intelligence mounts that config read-only at `/seerr-config` and uses
-  Seerr's own API to add optional 2160p Arr server entries. Seerr secrets are
-  read from the private config volume and are not stored in the market JSON.
-- Seerr's first-run Jellyfin, Radarr, and Sonarr API keys belong in Seerr's UI
-  or private config volume, never in the market JSON.
+- A short-lived `seerr-bootstrap` service seeds Seerr's private `settings.json`
+  before Seerr starts, so Seerr is not stuck in first-run mode on clean installs.
+- Danish Intelligence mounts the Seerr config at `/seerr-config`, adds the
+  discovered Radarr/Sonarr entries, and falls back to writing `settings.json`
+  directly when Seerr's protected API is locked because no Seerr admin user
+  exists yet.
+- Jellyfin/Plex details come from optional installer fields or the private
+  config volume. Private API keys are never stored in the market JSON.
 
 ## Permissions
 
