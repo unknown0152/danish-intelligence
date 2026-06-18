@@ -36,6 +36,10 @@ Image:
 ghcr.io/unknown0152/danish-intelligence:latest
 ```
 
+Tagged releases also publish matching Docker image tags. The Cosmos market
+points to tagged compose files, and those full-stack compose files pin Danish
+Intelligence to the same release image tag so clean installs are reproducible.
+
 The core Cosmos installer fields are optional:
 
 - `ProwlarrKey`: Prowlarr API key. Danish Intelligence first tries mounted

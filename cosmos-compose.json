@@ -24,7 +24,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:latest",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.9",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
