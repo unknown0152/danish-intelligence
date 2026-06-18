@@ -10,6 +10,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 import importlib.util
 from pathlib import Path
+from urllib.parse import urlencode
 
 from aiohttp import web
 import aiohttp
@@ -391,6 +392,163 @@ async def handle_install_debug(request: web.Request) -> web.Response:
     return web.json_response(diagnostics_summary(max(1, min(limit, 400))))
 
 
+def _json_int(value, default=None):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _xml_text(node, name: str) -> str:
+    child = node.find(name)
+    return child.text.strip() if child is not None and child.text else ""
+
+
+def _parse_newznab_items(xml_text: str, *, indexer_id: int, indexer_name: str) -> list[dict]:
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    items = []
+    ns_attr_suffix = "}attr"
+    for item in root.findall(".//channel/item"):
+        attrs = {}
+        categories = []
+        for child in list(item):
+            if child.tag.endswith(ns_attr_suffix):
+                name = child.attrib.get("name")
+                value = child.attrib.get("value")
+                if not name:
+                    continue
+                attrs.setdefault(name, []).append(value)
+                if name == "category" and value is not None:
+                    categories.append(_json_int(value, value))
+        enclosure = item.find("enclosure")
+        enclosure_url = enclosure.attrib.get("url") if enclosure is not None else ""
+        size = None
+        if "size" in attrs and attrs["size"]:
+            size = _json_int(attrs["size"][0])
+        if size is None and enclosure is not None:
+            size = _json_int(enclosure.attrib.get("length"))
+        title = _xml_text(item, "title")
+        items.append(
+            {
+                "title": title,
+                "releaseTitle": title,
+                "guid": _xml_text(item, "guid"),
+                "downloadUrl": enclosure_url or _xml_text(item, "link"),
+                "link": _xml_text(item, "link"),
+                "comments": _xml_text(item, "comments"),
+                "description": _xml_text(item, "description"),
+                "pubDate": _xml_text(item, "pubDate"),
+                "size": size,
+                "indexer": indexer_name,
+                "indexerName": indexer_name,
+                "indexerId": indexer_id,
+                "protocol": "usenet",
+                "categories": categories,
+                "attrs": attrs,
+            }
+        )
+    return items
+
+
+async def _prowlarr_indexers(app: web.Application, prowlarr_url: str, api_key: str) -> list[dict]:
+    headers = {"X-Api-Key": api_key}
+    async with app["session"].get(
+        f"{prowlarr_url}/api/v1/indexer",
+        headers=headers,
+        timeout=aiohttp.ClientTimeout(total=10),
+    ) as resp:
+        if resp.status != 200:
+            raise web.HTTPBadGateway(text=f"Prowlarr indexer list failed: {resp.status}")
+        data = await resp.json()
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, dict) and item.get("enable") is True]
+
+
+async def handle_search_v1(request: web.Request) -> web.Response:
+    prowlarr_key = (
+        _clean_env("PROWLARR_API_KEY")
+        or _clean_env("PROWLARR_APIKEY")
+        or _read_config_key("prowlarr")
+    )
+    incoming_key = request.query.get("apikey") or request.headers.get("X-Api-Key", "")
+    if not prowlarr_key:
+        return web.json_response({"error": "PROWLARR_API_KEY missing"}, status=500)
+    if not secrets.compare_digest(incoming_key, prowlarr_key):
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    query = (request.query.get("query") or request.query.get("q") or "").strip()
+    media_type = (request.query.get("media_type") or request.query.get("type") or "movie").strip().lower()
+    if media_type not in {"movie", "tv"}:
+        return web.json_response({"error": "media_type must be movie or tv"}, status=400)
+    try:
+        limit = max(1, min(int(request.query.get("limit", "100")), 500))
+    except ValueError:
+        limit = 100
+
+    prowlarr_url = os.getenv("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
+    indexers = await _prowlarr_indexers(request.app, prowlarr_url, prowlarr_key)
+    t_value = "movie" if media_type == "movie" else "tvsearch"
+    categories = (
+        "2000,2010,2020,2030,2040,2045,2050,2060,2070,2080,2090"
+        if media_type == "movie"
+        else "5000,5010,5020,5030,5040,5045,5050,5070,5090"
+    )
+    base_params = {
+        "t": t_value,
+        "q": query,
+        "cat": categories,
+        "extended": "1",
+        "apikey": prowlarr_key,
+        "offset": "0",
+        "limit": str(limit),
+    }
+    results = []
+    errors = []
+    for indexer in indexers:
+        indexer_id = _json_int(indexer.get("id"))
+        if indexer_id is None:
+            continue
+        indexer_name = str(indexer.get("name") or f"Indexer {indexer_id}")
+        proxy_port = getattr(main_proxy, "LISTEN_PORT", 9699)
+        url = f"http://127.0.0.1:{proxy_port}/{indexer_id}/api?{urlencode(base_params)}"
+        try:
+            async with request.app["session"].get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                body = await resp.text(errors="replace")
+                if resp.status != 200:
+                    errors.append({"indexer": indexer_name, "status": resp.status, "body": body[:500]})
+                    continue
+        except Exception as exc:
+            errors.append({"indexer": indexer_name, "error": str(exc)})
+            continue
+        results.extend(
+            _parse_newznab_items(body, indexer_id=indexer_id, indexer_name=indexer_name)
+        )
+        if len(results) >= limit:
+            results = results[:limit]
+            break
+
+    return web.json_response(
+        {
+            "query": query,
+            "media_type": media_type,
+            "total": len(results),
+            "results": results,
+            "indexers": [
+                {"id": item.get("id"), "name": item.get("name")}
+                for item in indexers
+            ],
+            "errors": errors,
+        }
+    )
+
+
 async def handle_radarr_webhook(request: web.Request) -> web.Response:
     return await handle_arr_webhook(request, "radarr")
 
@@ -415,6 +573,7 @@ async def main():
     app.router.add_get("/status", handle_status)
     app.router.add_get("/status.json", handle_status_json)
     app.router.add_get("/debug/install", handle_install_debug)
+    app.router.add_get("/search/v1", handle_search_v1)
     app.router.add_get("/ob/api", ob_server.handle_api)
     app.router.add_get("/ob/health", ob_server.handle_health)
 
