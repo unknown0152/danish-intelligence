@@ -2316,7 +2316,7 @@ def _seerr_base_payload(app: ArrApp, name: str, profile_name: str, profile_id: i
         "isDefault": is_default,
         "externalUrl": _seerr_external_url(app),
         "syncEnabled": True,
-        "preventSearch": False,
+        "preventSearch": True,
         "tagRequests": False,
         "tags": [],
     }
