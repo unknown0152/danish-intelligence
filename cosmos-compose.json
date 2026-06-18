@@ -24,7 +24,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.9",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.10",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -43,7 +43,8 @@
                 "INSTALL_DEBUG_FILE=/config/install-debug.jsonl",
                 "INSTALL_DEBUG_SNAPSHOT=/config/install-debug-latest.json",
                 "LISTEN_PORT=9699",
-                "LISTEN_HOST=0.0.0.0"
+                "LISTEN_HOST=0.0.0.0",
+                "ENABLE_2160P_ARRS=auto"
             ],
             "labels": {
                 "cosmos-auto-update": "true",
@@ -69,8 +70,20 @@
                     "read_only": true
                 },
                 {
+                    "source": "/srv/config/radarr-2160p",
+                    "target": "/arr-config/radarr-2160p",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
                     "source": "/srv/config/sonarr",
                     "target": "/arr-config/sonarr",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
+                    "source": "/srv/config/sonarr-2160p",
+                    "target": "/arr-config/sonarr-2160p",
                     "type": "bind",
                     "read_only": true
                 }

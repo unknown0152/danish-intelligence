@@ -95,7 +95,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.9",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.10",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -112,7 +112,7 @@
                 "SEERR_URL=http://seerr:5055",
                 "MEDIA_SERVER_TYPE=plex",
                 "MEDIA_SERVER_URL=http://plex:32400",
-                "ENABLE_2160P_ARRS=false",
+                "ENABLE_2160P_ARRS=auto",
                 "ARR_READY_TIMEOUT_SECONDS=240",
                 "ARR_READY_RETRY_SECONDS=10",
                 "INSTALL_DEBUG=1",
@@ -152,8 +152,20 @@
                     "read_only": true
                 },
                 {
+                    "source": "{Context.ConfigRoot}/radarr-2160p",
+                    "target": "/arr-config/radarr-2160p",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
                     "source": "{Context.ConfigRoot}/sonarr",
                     "target": "/arr-config/sonarr",
+                    "type": "bind",
+                    "read_only": true
+                },
+                {
+                    "source": "{Context.ConfigRoot}/sonarr-2160p",
+                    "target": "/arr-config/sonarr-2160p",
                     "type": "bind",
                     "read_only": true
                 },
@@ -333,7 +345,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.9",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.10",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",

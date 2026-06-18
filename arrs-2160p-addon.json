@@ -1,0 +1,124 @@
+{
+    "minVersion": "0.9.0",
+    "cosmos-installer": {
+        "form": [
+            {
+                "name": "MediaRoot",
+                "label": "Host Media Root Path",
+                "initialValue": "/srv/media",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "ConfigRoot",
+                "label": "Host Config Root Path",
+                "initialValue": "/srv/config",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "PUID",
+                "label": "Container User ID (PUID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "PGID",
+                "label": "Container Group ID (PGID)",
+                "initialValue": "1001",
+                "type": "text",
+                "required": true
+            }
+        ]
+    },
+    "services": {
+        "radarr-2160p": {
+            "image": "lscr.io/linuxserver/radarr:latest",
+            "container_name": "radarr-2160p",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
+                "TZ=Europe/Copenhagen"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/radarr-2160p",
+                    "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                },
+                {
+                    "source": "/mnt",
+                    "target": "/mnt",
+                    "type": "bind",
+                    "bind": {
+                        "propagation": "rshared"
+                    },
+                    "BindOptions": {
+                        "Propagation": "rshared"
+                    }
+                }
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        },
+        "sonarr-2160p": {
+            "image": "lscr.io/linuxserver/sonarr:latest",
+            "container_name": "sonarr-2160p",
+            "restart": "unless-stopped",
+            "environment": [
+                "PUID={Context.PUID}",
+                "PGID={Context.PGID}",
+                "TZ=Europe/Copenhagen"
+            ],
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}/sonarr-2160p",
+                    "target": "/config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                },
+                {
+                    "source": "/mnt",
+                    "target": "/mnt",
+                    "type": "bind",
+                    "bind": {
+                        "propagation": "rshared"
+                    },
+                    "BindOptions": {
+                        "Propagation": "rshared"
+                    }
+                }
+            ],
+            "labels": {
+                "cosmos-auto-update": "true",
+                "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        }
+    },
+    "networks": {
+        "media-stack": {
+            "name": "media-stack",
+            "driver": "bridge",
+            "attachable": true
+        }
+    }
+}

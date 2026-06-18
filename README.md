@@ -54,6 +54,8 @@ Market entries:
   AltMount, and Danish Intelligence.
 - `Danish Media Stack (Plex Edition)`: Plex, Seerr, Radarr, Sonarr, AltMount,
   and Danish Intelligence.
+- `Danish 2160p Arr Add-on`: optional dedicated `radarr-2160p` and
+  `sonarr-2160p` containers for true separate standard/2160p copies.
 - `Danish Intelligence`: standalone core for existing Arr/AltMount stacks.
 - `AltMount (Danish Edition)`: standalone patched AltMount.
 
@@ -80,15 +82,19 @@ The market offers two full-stack editions:
 - `Danish Media Stack (Jellyfin Edition)` deploys Jellyfin as the media server.
 
 Both editions include Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.
-Only the selected media server is deployed. The current public Plex/Jellyfin
-market entries install the standard Radarr/Sonarr pair. The auto-painter also
-supports companion `radarr-2160p` and `sonarr-2160p` instances when a custom or
-future manifest provides those services, their config mounts, and
-`ENABLE_2160P_ARRS=true`. In that mode it registers the 2160p Arrs in Prowlarr
-when reachable, paints separate 2160p root folders, adds matching Seerr server
-entries, creates `Danish Audio 2160p` and `Danish Subtitles 2160p` profiles with
-only 2160p qualities enabled, and uses separate AltMount SAB categories
-(`movies-2160p` and `tv-2160p`).
+Only the selected media server is deployed. The base Plex/Jellyfin entries
+install the standard Radarr/Sonarr pair.
+
+For true separate standard and 2160p copies, install `Danish 2160p Arr Add-on`
+after the base stack, using the same `ConfigRoot`, `MediaRoot`, `PUID`, and
+`PGID`. Then restart `danish-intelligence`. The base stack already mounts the
+future 2160p config paths read-only, so Danish Intelligence auto-detects
+`radarr-2160p` and `sonarr-2160p` when their `config.xml` files appear. It then
+registers the 2160p Arrs in Prowlarr, paints separate 2160p root folders, adds
+matching Seerr server entries, creates strict `Danish Audio 2160p` and
+`Danish Subtitles 2160p` profiles, uses separate AltMount SAB categories
+(`movies-2160p` and `tv-2160p`), and creates `Movies 2160p` / `TV Shows 2160p`
+libraries in Plex or Jellyfin when the media-server API is available.
 
 The full-stack editions create this media/library shape:
 
@@ -100,12 +106,16 @@ The full-stack editions create this media/library shape:
 /media/danish-tv
 /media/kids-movies
 /media/kids-tv
+/media/movies-2160p        optional add-on
+/media/tv-2160p            optional add-on
 ```
 
 Radarr uses `/media/movies`, `/media/danish-movies`, `/media/documentaries`,
 and `/media/kids-movies`. Sonarr uses `/media/tv`, `/media/danish-tv`, and
 `/media/kids-tv`. Jellyfin or Plex gets matching libraries, and Seerr receives
-matching movie/TV root-folder choices.
+matching movie/TV root-folder choices. With the 2160p add-on, Radarr 2160p uses
+`/media/movies-2160p`, Sonarr 2160p uses `/media/tv-2160p`, and the media
+server gets matching `Movies 2160p` and `TV Shows 2160p` libraries.
 
 ## Expected Network
 
@@ -297,6 +307,15 @@ If Auto-Config does not run:
   - `/arr-config/radarr`
   - `/arr-config/sonarr`
 
+If the 2160p add-on is installed but not painted:
+
+- Confirm `radarr-2160p` and `sonarr-2160p` are running on the `media-stack`
+  network.
+- Confirm Danish Intelligence can see `/arr-config/radarr-2160p/config.xml`
+  and `/arr-config/sonarr-2160p/config.xml`.
+- Restart `danish-intelligence` to re-run the idempotent auto-painter. The base
+  stack uses `ENABLE_2160P_ARRS=auto`, so no manual environment edit is needed.
+
 If `/ob/health` reports `disabled`, add `OldBoysToken` and `OldBoysRSS` in
 Cosmos and recreate the container. The rest of the service can run without
 OldBoys.
@@ -327,8 +346,8 @@ For AltMount integration:
   metadata cleanup, automatic repair, and repair-on-import remain disabled by
   default.
 - The full stack defines AltMount SAB categories from the manifest. Standard
-  Arrs use `movies` and `tv`; optional 2160p Arrs use `movies-2160p` and
-  `tv-2160p`.
+  Arrs use `movies` and `tv`; the optional 2160p add-on uses `movies-2160p`
+  and `tv-2160p`.
 - Danish Intelligence defaults `ALTMOUNT_URL` to
   `http://altmount:8080/sabnzbd`.
 - Radarr/Sonarr download clients should point to Danish Intelligence:
@@ -368,6 +387,8 @@ For Jellyfin integration:
 - Danish Intelligence creates the clean Jellyfin libraries automatically:
   `Movies`, `Danish Movies`, `Documentaries`, `TV Shows`, `Danish TV`,
   `Kids Movies`, and `Kids TV`.
+- When the 2160p add-on is detected, it also creates `Movies 2160p` and
+  `TV Shows 2160p`.
 - Seerr receives the same private Jellyfin API key through Seerr's API, so
   Jellyfin login and availability checks work without storing a Jellyfin key in
   the public market manifest.
@@ -380,6 +401,8 @@ For Plex integration:
 - Danish Intelligence creates the clean Plex libraries automatically:
   `Movies`, `Danish Movies`, `Documentaries`, `TV Shows`, `Danish TV`,
   `Kids Movies`, and `Kids TV`.
+- When the 2160p add-on is detected, it also creates `Movies 2160p` and
+  `TV Shows 2160p`.
 - The Plex install form exposes optional `PlexClaim` and `PlexToken` fields.
   `PlexClaim` is passed only to the Plex container so users can claim the server
   through Plex's normal flow. `PlexToken` can be used when an existing Plex

@@ -141,6 +141,10 @@ JELLYFIN_DEFAULT_LIBRARIES = (
     ("Kids Movies", "movies", "/media/kids-movies"),
     ("Kids TV", "tvshows", "/media/kids-tv"),
 )
+JELLYFIN_2160P_LIBRARIES = (
+    ("Movies 2160p", "movies", "/media/movies-2160p"),
+    ("TV Shows 2160p", "tvshows", "/media/tv-2160p"),
+)
 PLEX_CONFIG_PATHS = (
     "/plex-config/Library/Application Support/Plex Media Server",
     "/app/plex-config/Library/Application Support/Plex Media Server",
@@ -154,6 +158,10 @@ PLEX_DEFAULT_LIBRARIES = (
     ("Danish TV", "show", "/media/danish-tv"),
     ("Kids Movies", "movie", "/media/kids-movies"),
     ("Kids TV", "show", "/media/kids-tv"),
+)
+PLEX_2160P_LIBRARIES = (
+    ("Movies 2160p", "movie", "/media/movies-2160p"),
+    ("TV Shows 2160p", "show", "/media/tv-2160p"),
 )
 SEERR_ADMIN_PASSWORD_FILE = "/config/seerr-admin-password.txt"
 SEERR_TITLE = "Danish Requests"
@@ -239,6 +247,21 @@ def _arr_kind(app: dict[str, Any]) -> str:
 def _is_2160p_instance(name: str, url: str = "") -> bool:
     text = f"{name} {url}".lower()
     return any(token in text for token in ("2160p", "2160", "uhd", "4k"))
+
+
+def _arr_config_exists(config_key: str) -> bool:
+    return any(Path(path).exists() for path in ARR_CONFIG_PATHS.get(config_key, ()))
+
+
+def _enable_2160p_arrs() -> bool:
+    value = _clean_env("ENABLE_2160P_ARRS").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    if _clean_env("RADARR_2160P_URL") or _clean_env("SONARR_2160P_URL"):
+        return True
+    return _arr_config_exists("radarr-2160p") or _arr_config_exists("sonarr-2160p")
 
 
 def _altmount_download_category(app: ArrApp) -> str:
@@ -549,14 +572,14 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
         "auto_config.bootstrap.loaded",
         existing_app_count=len(apps),
         schema_count=len(schemas),
-        enable_2160p=_truthy_env("ENABLE_2160P_ARRS"),
+        enable_2160p=_enable_2160p_arrs(),
     )
 
     wanted_apps = [
         ("Radarr", "Radarr", _default_arr_url("Radarr", "Radarr")),
         ("Sonarr", "Sonarr", _default_arr_url("Sonarr", "Sonarr")),
     ]
-    if _truthy_env("ENABLE_2160P_ARRS"):
+    if _enable_2160p_arrs():
         wanted_apps.extend([
             ("Radarr", "Radarr 2160p", _default_arr_url("Radarr", "Radarr 2160p")),
             ("Sonarr", "Sonarr 2160p", _default_arr_url("Sonarr", "Sonarr 2160p")),
@@ -718,7 +741,7 @@ def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_ke
 
 def _required_arr_app_names() -> set[str]:
     names = {"Radarr", "Sonarr"}
-    if _truthy_env("ENABLE_2160P_ARRS"):
+    if _enable_2160p_arrs():
         names.update({"Radarr 2160p", "Sonarr 2160p"})
     return names
 
@@ -1071,7 +1094,11 @@ def _ensure_jellyfin_libraries(session: requests.Session) -> int:
         existing_names = {str(item.get("Name") or "").lower() for item in existing if isinstance(item, dict)}
         created = 0
 
-        for name, collection_type, path in JELLYFIN_DEFAULT_LIBRARIES:
+        libraries = list(JELLYFIN_DEFAULT_LIBRARIES)
+        if _enable_2160p_arrs():
+            libraries.extend(JELLYFIN_2160P_LIBRARIES)
+
+        for name, collection_type, path in libraries:
             Path(path).mkdir(parents=True, exist_ok=True)
             if name.lower() in existing_names:
                 continue
@@ -1186,7 +1213,11 @@ def _ensure_plex_libraries(session: requests.Session) -> int:
         }
         created = 0
 
-        for name, library_type, path in PLEX_DEFAULT_LIBRARIES:
+        libraries = list(PLEX_DEFAULT_LIBRARIES)
+        if _enable_2160p_arrs():
+            libraries.extend(PLEX_2160P_LIBRARIES)
+
+        for name, library_type, path in libraries:
             Path(path).mkdir(parents=True, exist_ok=True)
             if name.lower() in existing_names:
                 continue
@@ -2316,6 +2347,7 @@ def paint() -> dict[str, int]:
     record(
         "auto_config.paint.begin",
         prowlarr_url=prowlarr_url,
+        enable_2160p=_enable_2160p_arrs(),
         env=safe_env([
             "PROWLARR_URL",
             "PROWLARR_API_KEY",

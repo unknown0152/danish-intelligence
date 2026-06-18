@@ -22,7 +22,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.9/cosmos-compose.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.10/cosmos-compose.json"
     },
     {
       "id": "prowlarr-danish-prerequisite",
@@ -43,7 +43,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.9/prowlarr-prereq.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.10/prowlarr-prereq.json"
     },
     {
       "id": "altmount-danish",
@@ -64,7 +64,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.9/altmount-v2.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.10/altmount-v2.json"
     },
     {
       "id": "danish-master-stack-plex",
@@ -89,7 +89,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.9/master-stack.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.10/master-stack.json"
     },
     {
       "id": "danish-master-stack-jellyfin",
@@ -114,7 +114,31 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.9/master-stack-jellyfin.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.10/master-stack-jellyfin.json"
+    },
+    {
+      "id": "danish-2160p-arrs-addon",
+      "name": "Danish 2160p Arr Add-on",
+      "description": "Adds dedicated Radarr/Sonarr instances for true separate 2160p libraries",
+      "longDescription": "<p><b>Danish 2160p Arr Add-on</b></p><p>This installs dedicated <b>radarr-2160p</b> and <b>sonarr-2160p</b> containers on the shared <code>media-stack</code> network. Use it when you want true separate 1080p/standard and 2160p copies with separate media libraries.</p><p>Install a Danish Media Stack edition first, then install this add-on with the same <code>ConfigRoot</code>, <code>MediaRoot</code>, <code>PUID</code>, and <code>PGID</code>. Restart <code>danish-intelligence</code> after the add-on starts. Danish Intelligence auto-detects the new config files, registers the 2160p Arrs in Prowlarr, paints strict 2160p profiles, creates <code>/media/movies-2160p</code> and <code>/media/tv-2160p</code>, adds 2160p Seerr targets, and creates 2160p Plex/Jellyfin libraries when the media server API is available.</p>",
+      "url": "https://github.com/unknown0152/danish-intelligence",
+      "tags": [
+        "radarr",
+        "sonarr",
+        "2160p",
+        "uhd",
+        "4k",
+        "addon",
+        "danish"
+      ],
+      "repository": "https://github.com/unknown0152/danish-intelligence",
+      "image": "lscr.io/linuxserver/radarr",
+      "icon": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/master/icon.png",
+      "screenshots": [],
+      "supported_architectures": [
+        "amd64"
+      ],
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.10/arrs-2160p-addon.json"
     }
   ]
 }
