@@ -1693,8 +1693,11 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
     if existing is None:
         profile.pop("id", None)
     profile["name"] = name
+    profile["upgradeAllowed"] = True
     profile["minFormatScore"] = 10000
     profile["cutoffFormatScore"] = 0
+    if "language" in profile:
+        profile["language"] = {"id": -1, "name": "Any"}
     profile["formatItems"] = _complete_format_items(valid_cf_ids, {
         cf_ids[fmt_name]: score
         for fmt_name, score in scores.items()
