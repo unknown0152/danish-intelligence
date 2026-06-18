@@ -447,6 +447,7 @@ async def handle(request: web.Request) -> web.Response:
     arr_source, indexer_id = parsed_path
 
     params = dict(request.rel_url.query)
+    params["t"] = _normalize_newznab_mode(params.get("t", ""))
     incoming_key = params.get("apikey") or request.headers.get("X-Api-Key", "")
     if not PROWLARR_API_KEY:
         _metrics["auth_misconfigured"] += 1
@@ -478,6 +479,21 @@ async def handle(request: web.Request) -> web.Response:
                                        apikey, dedup_key)
 
     return await _handle_inner(request, indexer_id, params, arr_source, apikey, dedup_key)
+
+
+def _normalize_newznab_mode(value: str) -> str:
+    aliases = {
+        "search": "search",
+        "tv": "tvsearch",
+        "tvsearch": "tvsearch",
+        "tv-search": "tvsearch",
+        "movie": "movie",
+        "moviesearch": "movie",
+        "movie-search": "movie",
+        "caps": "caps",
+        "get": "get",
+    }
+    return aliases.get((value or "").strip().lower(), value or "")
 
 
 async def _handle_inner(request, indexer_id, params, arr_source, apikey, dedup_key):

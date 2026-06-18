@@ -17,8 +17,23 @@ from .translate import build_ob_params, normalize_title, requested_ob_categories
 
 log = logging.getLogger("ob_proxy.server")
 
-# Newznab search "modes" we accept on t=.
-_SEARCH_MODES = {"search", "tvsearch", "tv-search", "movie", "movie-search"}
+# Newznab search modes accepted by Servarr/Prowlarr are not perfectly stable
+# across versions. Normalize aliases at the edge so the rest of the proxy keeps
+# using its existing canonical modes.
+_SEARCH_MODE_ALIASES = {
+    "search": "search",
+    "tv": "tvsearch",
+    "tvsearch": "tvsearch",
+    "tv-search": "tvsearch",
+    "movie": "movie",
+    "moviesearch": "movie",
+    "movie-search": "movie",
+}
+_SEARCH_MODES = set(_SEARCH_MODE_ALIASES)
+
+
+def _normalize_search_mode(value: str) -> str:
+    return _SEARCH_MODE_ALIASES.get((value or "").strip().lower(), value or "")
 
 
 def _safe_filename(base: str, password: str | None) -> str:
@@ -66,7 +81,7 @@ async def handle_api(request: web.Request) -> web.Response:
     if denied is not None:
         return denied
 
-    t = request.query.get("t", "")
+    t = _normalize_search_mode(request.query.get("t", ""))
     if t == "caps":
         return web.Response(body=build_caps().encode(), content_type="application/xml")
     if t in _SEARCH_MODES:
