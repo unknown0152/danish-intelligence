@@ -55,6 +55,19 @@
                 "required": false
             },
             {
+                "name": "SeerrAdminEmail",
+                "label": "Seerr Admin Email",
+                "initialValue": "admin@danish.requests",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "SeerrAdminPassword",
+                "label": "Seerr Admin Password (optional)",
+                "type": "text",
+                "required": false
+            },
+            {
                 "name": "PlexServerName",
                 "label": "Plex Server Name (optional)",
                 "type": "text",
@@ -96,6 +109,9 @@
                 "LISTEN_PORT=9699",
                 "LISTEN_HOST=0.0.0.0",
                 "MEDIA_SERVER_EXTERNAL_URL={Context.MediaServerExternalUrl}",
+                "SEERR_ADMIN_EMAIL={Context.SeerrAdminEmail}",
+                "SEERR_ADMIN_PASSWORD={Context.SeerrAdminPassword}",
+                "SEERR_ADMIN_PASSWORD_FILE=/config/seerr-admin-password.txt",
                 "PLEX_SERVER_NAME={Context.PlexServerName}",
                 "PLEX_MACHINE_ID={Context.PlexMachineId}"
             ],

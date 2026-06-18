@@ -55,6 +55,19 @@
                 "required": false
             },
             {
+                "name": "SeerrAdminEmail",
+                "label": "Seerr Admin Email",
+                "initialValue": "admin@danish.requests",
+                "type": "text",
+                "required": true
+            },
+            {
+                "name": "SeerrAdminPassword",
+                "label": "Seerr Admin Password (optional)",
+                "type": "text",
+                "required": false
+            },
+            {
                 "name": "JellyfinApiKey",
                 "label": "Jellyfin API Key (optional)",
                 "type": "text",
@@ -90,6 +103,9 @@
                 "LISTEN_PORT=9699",
                 "LISTEN_HOST=0.0.0.0",
                 "MEDIA_SERVER_EXTERNAL_URL={Context.MediaServerExternalUrl}",
+                "SEERR_ADMIN_EMAIL={Context.SeerrAdminEmail}",
+                "SEERR_ADMIN_PASSWORD={Context.SeerrAdminPassword}",
+                "SEERR_ADMIN_PASSWORD_FILE=/config/seerr-admin-password.txt",
                 "JELLYFIN_API_KEY={Context.JellyfinApiKey}"
             ],
             "labels": {

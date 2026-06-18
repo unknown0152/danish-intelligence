@@ -301,10 +301,13 @@ For Seerr integration:
   `{Context.ConfigRoot}/seerr`.
 - A short-lived `seerr-bootstrap` service seeds Seerr's private `settings.json`
   before Seerr starts, so Seerr is not stuck in first-run mode on clean installs.
-- Danish Intelligence mounts the Seerr config at `/seerr-config`, adds the
-  discovered Radarr/Sonarr entries, and falls back to writing `settings.json`
-  directly when Seerr's protected API is locked because no Seerr admin user
-  exists yet.
+- Danish Intelligence mounts the Seerr config at `/seerr-config`, creates the
+  first local Seerr admin only when the Seerr database has no users, then adds
+  the discovered Radarr/Sonarr entries through Seerr's API.
+- The install form exposes `SeerrAdminEmail` and optional
+  `SeerrAdminPassword`. If the password is left blank, Danish Intelligence
+  generates one and saves it at
+  `{Context.ConfigRoot}/danish-intelligence/seerr-admin-password.txt`.
 - Jellyfin/Plex details come from optional installer fields or the private
   config volume. Private API keys are never stored in the market JSON.
 

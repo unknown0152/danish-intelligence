@@ -11,6 +11,8 @@ import copy
 import json
 import os
 import re
+import secrets
+import sqlite3
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -113,6 +115,12 @@ SEERR_CONFIG_PATHS = (
     "/app/config/settings.json",
     "/srv/config/seerr/settings.json",
 )
+SEERR_DB_PATHS = (
+    "/seerr-config/db/db.sqlite3",
+    "/app/config/db/db.sqlite3",
+    "/srv/config/seerr/db/db.sqlite3",
+)
+SEERR_ADMIN_PASSWORD_FILE = "/config/seerr-admin-password.txt"
 SEERR_TITLE = "Danish Requests"
 SEERR_DEFAULT_MOVIE_ROOTS = (
     ("Movies - Danish Subtitles", "/media/movies", "subtitles", True),
@@ -836,6 +844,111 @@ def _write_seerr_settings(settings: dict[str, Any]) -> bool:
     except OSError as exc:
         record("auto_config.seerr_settings.write_failed", path=str(cfg), error=str(exc), error_type=type(exc).__name__)
         return False
+
+
+def _seerr_db_path() -> Path | None:
+    timeout = int(_clean_env("SEERR_DB_READY_TIMEOUT_SECONDS") or "90")
+    deadline = time.time() + max(timeout, 0)
+    while True:
+        for path in SEERR_DB_PATHS:
+            db = Path(path)
+            if not db.exists():
+                continue
+            try:
+                with sqlite3.connect(str(db), timeout=10) as conn:
+                    tables = {
+                        row[0]
+                        for row in conn.execute(
+                            "select name from sqlite_master where type='table' and name in ('user', 'user_settings')"
+                        ).fetchall()
+                    }
+                if {"user", "user_settings"}.issubset(tables):
+                    return db
+            except sqlite3.Error as exc:
+                record("auto_config.seerr_admin.db_probe_failed", path=str(db), error=str(exc), error_type=type(exc).__name__)
+        if time.time() >= deadline:
+            return None
+        time.sleep(2)
+
+
+def _seerr_admin_email() -> str:
+    email = (_clean_env("SEERR_ADMIN_EMAIL") or "admin@danish.requests").strip().lower()
+    return email or "admin@danish.requests"
+
+
+def _seerr_admin_password() -> tuple[str, bool]:
+    password = _clean_env("SEERR_ADMIN_PASSWORD")
+    if password:
+        return password, False
+
+    password_file = Path(_clean_env("SEERR_ADMIN_PASSWORD_FILE") or SEERR_ADMIN_PASSWORD_FILE)
+    try:
+        if password_file.exists():
+            existing = password_file.read_text().strip()
+            if existing:
+                return existing, False
+
+        password = f"Danish-{secrets.token_urlsafe(18)}"
+        password_file.parent.mkdir(parents=True, exist_ok=True)
+        password_file.write_text(password + "\n")
+        try:
+            password_file.chmod(0o600)
+        except OSError:
+            pass
+        record("auto_config.seerr_admin.password_generated", path=str(password_file))
+        return password, True
+    except OSError as exc:
+        record("auto_config.seerr_admin.password_file_failed", path=str(password_file), error=str(exc), error_type=type(exc).__name__)
+        return f"Danish-{secrets.token_urlsafe(18)}", True
+
+
+def _ensure_seerr_admin_user() -> int:
+    db = _seerr_db_path()
+    if not db:
+        record("auto_config.seerr_admin.skip_missing_db", paths=list(SEERR_DB_PATHS))
+        return 0
+
+    try:
+        import bcrypt
+    except ImportError as exc:
+        record("auto_config.seerr_admin.skip_missing_bcrypt", error=str(exc), error_type=type(exc).__name__)
+        return 0
+
+    try:
+        with sqlite3.connect(str(db), timeout=30) as conn:
+            user_count = int(conn.execute("select count(*) from user").fetchone()[0])
+            if user_count > 0:
+                record("auto_config.seerr_admin.exists", path=str(db), users=user_count)
+                return 0
+
+            email = _seerr_admin_email()
+            password, generated = _seerr_admin_password()
+            password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+            conn.execute(
+                """
+                insert into user (id, email, username, permissions, avatar, password, userType)
+                values (1, ?, ?, 2, ?, ?, 2)
+                """,
+                (email, "admin", "/avatar.png", password_hash),
+            )
+            conn.execute(
+                """
+                insert into user_settings (locale, discoverRegion, streamingRegion, originalLanguage, userId)
+                values (?, ?, ?, ?, 1)
+                """,
+                ("en", "", "DK", "da|en"),
+            )
+            conn.commit()
+            record("auto_config.seerr_admin.created", path=str(db), email=email, generated_password=generated)
+            if generated:
+                print("[Core] Auto-Config: created Seerr admin; password saved to /config/seerr-admin-password.txt", flush=True)
+            else:
+                print(f"[Core] Auto-Config: created Seerr admin {email}", flush=True)
+            return 1
+    except sqlite3.Error as exc:
+        record("auto_config.seerr_admin.failed", path=str(db), error=str(exc), error_type=type(exc).__name__)
+        print(f"[Core] Auto-Config: failed to create Seerr admin: {exc}", flush=True)
+        return 0
 
 
 def _media_server_type() -> str:
@@ -1948,6 +2061,9 @@ def paint() -> dict[str, int]:
             "RADARR_2160P_URL",
             "SONARR_2160P_URL",
             "SEERR_URL",
+            "SEERR_ADMIN_EMAIL",
+            "SEERR_ADMIN_PASSWORD",
+            "SEERR_ADMIN_PASSWORD_FILE",
             "ENABLE_2160P_ARRS",
             "PROXY_API_KEY",
         ]),
@@ -1958,6 +2074,7 @@ def paint() -> dict[str, int]:
             "/arr-config/radarr-2160p/config.xml",
             "/arr-config/sonarr-2160p/config.xml",
             "/seerr-config/settings.json",
+            "/seerr-config/db/db.sqlite3",
             "/media",
             "/mnt",
         ]),
@@ -1977,7 +2094,7 @@ def paint() -> dict[str, int]:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
     _sync_prowlarr_indexers(session, prowlarr_url, prowlarr_key)
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_servers": 0, "altmount_arr_instances": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_admin": 0, "seerr_servers": 0, "altmount_arr_instances": 0}
     for app in apps:
         record("auto_config.app.begin", app=app.name, kind=app.kind, slug=app.slug, url=app.url)
         _paint_naming(session, app)
@@ -2019,6 +2136,7 @@ def paint() -> dict[str, int]:
 
     _harden_prowlarr_app_sync(session, prowlarr_url, prowlarr_key)
     totals["altmount_arr_instances"] = _ensure_altmount_arr_management(session, apps)
+    totals["seerr_admin"] = _ensure_seerr_admin_user()
     totals["seerr_servers"] = _ensure_seerr_servers(session, apps)
     time.sleep(10)
     for app in apps:
