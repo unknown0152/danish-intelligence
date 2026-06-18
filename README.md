@@ -327,6 +327,22 @@ For Jellyfin integration:
   Jellyfin login and availability checks work without storing a Jellyfin key in
   the public market manifest.
 
+For Plex integration:
+
+- The Plex edition mounts Plex's private config into Danish Intelligence at
+  `/plex-config` so first boot can use Plex's local admin token when Plex has
+  generated one.
+- Danish Intelligence creates the clean Plex libraries automatically:
+  `Movies`, `Danish Movies`, `Documentaries`, `TV Shows`, `Danish TV`,
+  `Kids Movies`, and `Kids TV`.
+- The Plex install form exposes optional `PlexClaim` and `PlexToken` fields.
+  `PlexClaim` is passed only to the Plex container so users can claim the server
+  through Plex's normal flow. `PlexToken` can be used when an existing Plex
+  access token should be passed to Seerr immediately.
+- If neither token is supplied, Danish Intelligence falls back to Plex's local
+  `.LocalAdminToken` for local library creation and local Seerr server checks.
+  This does not create a Plex cloud account login by itself.
+
 ## Permissions
 
 - The full-stack install form exposes `PUID` and `PGID`. Use the UID/GID that

@@ -136,6 +136,20 @@ JELLYFIN_DEFAULT_LIBRARIES = (
     ("Kids Movies", "movies", "/media/kids-movies"),
     ("Kids TV", "tvshows", "/media/kids-tv"),
 )
+PLEX_CONFIG_PATHS = (
+    "/plex-config/Library/Application Support/Plex Media Server",
+    "/app/plex-config/Library/Application Support/Plex Media Server",
+    "/srv/config/plex/Library/Application Support/Plex Media Server",
+)
+PLEX_DEFAULT_LIBRARIES = (
+    ("Movies", "movie", "/media/movies"),
+    ("Danish Movies", "movie", "/media/danish-movies"),
+    ("Documentaries", "movie", "/media/documentaries"),
+    ("TV Shows", "show", "/media/tv"),
+    ("Danish TV", "show", "/media/danish-tv"),
+    ("Kids Movies", "movie", "/media/kids-movies"),
+    ("Kids TV", "show", "/media/kids-tv"),
+)
 SEERR_ADMIN_PASSWORD_FILE = "/config/seerr-admin-password.txt"
 SEERR_TITLE = "Danish Requests"
 SEERR_DEFAULT_MOVIE_ROOTS = (
@@ -1076,6 +1090,128 @@ def _ensure_jellyfin_libraries(session: requests.Session) -> int:
         return 0
 
 
+def _plex_config_root() -> Path | None:
+    for path in PLEX_CONFIG_PATHS:
+        root = Path(path)
+        if root.exists():
+            return root
+    return None
+
+
+def _plex_preferences() -> dict[str, str]:
+    root = _plex_config_root()
+    if not root:
+        return {}
+    prefs = root / "Preferences.xml"
+    if not prefs.exists():
+        return {}
+    try:
+        return dict(ET.parse(prefs).getroot().attrib)
+    except ET.ParseError as exc:
+        record("auto_config.plex_preferences.failed", path=str(prefs), error=str(exc), error_type=type(exc).__name__)
+        return {}
+
+
+def _plex_token() -> str:
+    env_token = _clean_env("PLEX_TOKEN") or _clean_env("PLEX_ACCESS_TOKEN")
+    if env_token:
+        return env_token
+
+    prefs = _plex_preferences()
+    online_token = str(prefs.get("PlexOnlineToken") or "").strip()
+    if online_token:
+        record("auto_config.plex_token.discovered", source="preferences")
+        return online_token
+
+    root = _plex_config_root()
+    if root:
+        local_token_file = root / ".LocalAdminToken"
+        try:
+            local_token = local_token_file.read_text().strip() if local_token_file.exists() else ""
+        except OSError:
+            local_token = ""
+        if local_token:
+            record("auto_config.plex_token.discovered", source="local_admin")
+            return local_token
+
+    record("auto_config.plex_token.missing")
+    return ""
+
+
+def _plex_machine_id() -> str:
+    return _clean_env("PLEX_MACHINE_ID") or str(_plex_preferences().get("MachineIdentifier") or "")
+
+
+def _plex_headers(token: str) -> dict[str, str]:
+    return {
+        "X-Plex-Token": token,
+        "X-Plex-Product": "Danish Intelligence",
+        "X-Plex-Version": "1.0",
+        "X-Plex-Client-Identifier": "danish-intelligence",
+        "X-Plex-Platform": "Linux",
+    }
+
+
+def _ensure_plex_libraries(session: requests.Session) -> int:
+    if _media_server_type() != "plex":
+        return 0
+
+    token = _plex_token()
+    if not token:
+        record("auto_config.plex_libraries.skip_missing_token")
+        return 0
+
+    plex_url = _media_server_url()
+    headers = _plex_headers(token)
+    try:
+        prefs_response = session.put(
+            f"{plex_url}/:/prefs",
+            params={"AcceptedEULA": "1"},
+            headers=headers,
+            timeout=20,
+        )
+        prefs_response.raise_for_status()
+
+        response = session.get(f"{plex_url}/library/sections", headers=headers, timeout=20)
+        response.raise_for_status()
+        root = ET.fromstring(response.text)
+        existing_names = {
+            str(directory.attrib.get("title") or "").lower()
+            for directory in root.findall("Directory")
+        }
+        created = 0
+
+        for name, library_type, path in PLEX_DEFAULT_LIBRARIES:
+            Path(path).mkdir(parents=True, exist_ok=True)
+            if name.lower() in existing_names:
+                continue
+            scanner = "Plex Movie" if library_type == "movie" else "Plex TV Series"
+            agent = "tv.plex.agents.movie" if library_type == "movie" else "tv.plex.agents.series"
+            create_response = session.post(
+                f"{plex_url}/library/sections",
+                params={
+                    "type": library_type,
+                    "name": name,
+                    "scanner": scanner,
+                    "agent": agent,
+                    "language": "en-US",
+                    "location": path,
+                },
+                headers=headers,
+                timeout=30,
+            )
+            create_response.raise_for_status()
+            existing_names.add(name.lower())
+            created += 1
+
+        record("auto_config.plex_libraries.complete", created=created, total=len(existing_names))
+        return created
+    except (requests.RequestException, ET.ParseError, OSError) as exc:
+        print(f"[Core] Auto-Config: Plex library setup skipped: {exc}", flush=True)
+        record("auto_config.plex_libraries.failed", error=str(exc), error_type=type(exc).__name__)
+        return 0
+
+
 def _settings_host_block(url: str, default_port: int) -> tuple[str, int, bool, str]:
     parsed = urlparse(url)
     host = parsed.hostname or parsed.netloc or ""
@@ -1197,13 +1333,15 @@ def _seed_seerr_media_server_block(settings: dict[str, Any]) -> bool:
                 changed = True
     elif media_type == "plex":
         plex = settings.setdefault("plex", {})
+        token = _plex_token() or str(plex.get("accessToken") or "")
         values = {
             "name": _clean_env("PLEX_SERVER_NAME") or str(plex.get("name") or "Danish Plex"),
-            "machineId": _clean_env("PLEX_MACHINE_ID") or str(plex.get("machineId") or ""),
+            "machineId": _plex_machine_id() or str(plex.get("machineId") or ""),
             "ip": host,
             "port": port,
             "useSsl": use_ssl,
             "libraries": plex.get("libraries") or [],
+            "accessToken": token,
         }
         web_app_url = _clean_env("PLEX_WEB_APP_URL")
         if web_app_url:
@@ -2125,15 +2263,16 @@ def _seed_seerr_media_server_via_api(session: requests.Session, seerr_url: str, 
         except requests.RequestException as exc:
             record("auto_config.seerr.media_server.jellyfin_failed", error=str(exc), error_type=type(exc).__name__)
     elif media_type == "plex":
+        token = _plex_token()
         try:
-            current = _get_json(session, f"{seerr_url}/api/v1/settings/plex", seerr_key)
             host, port, use_ssl, _url_base = _settings_host_block(_media_server_url(), 32400)
             payload = {
-                **(current if isinstance(current, dict) else {}),
                 "ip": host,
                 "port": port,
                 "useSsl": use_ssl,
             }
+            if token:
+                payload["accessToken"] = token
             _post_json(session, f"{seerr_url}/api/v1/settings/plex", seerr_key, payload)
             record("auto_config.seerr.media_server.plex_complete")
         except requests.RequestException as exc:
@@ -2178,6 +2317,7 @@ def paint() -> dict[str, int]:
             "SEERR_ADMIN_PASSWORD",
             "SEERR_ADMIN_PASSWORD_FILE",
             "JELLYFIN_API_KEY",
+            "PLEX_TOKEN",
             "ENABLE_2160P_ARRS",
             "PROXY_API_KEY",
         ]),
@@ -2190,6 +2330,8 @@ def paint() -> dict[str, int]:
             "/seerr-config/settings.json",
             "/seerr-config/db/db.sqlite3",
             "/jellyfin-config/data/data/jellyfin.db",
+            "/plex-config/Library/Application Support/Plex Media Server/Preferences.xml",
+            "/plex-config/Library/Application Support/Plex Media Server/.LocalAdminToken",
             "/media",
             "/mnt",
         ]),
@@ -2209,7 +2351,7 @@ def paint() -> dict[str, int]:
         raise RuntimeError("No reachable Radarr/Sonarr applications found in Prowlarr")
     _sync_prowlarr_indexers(session, prowlarr_url, prowlarr_key)
 
-    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_admin": 0, "seerr_servers": 0, "altmount_arr_instances": 0, "jellyfin_libraries": 0}
+    totals = {"apps": 0, "custom_formats": 0, "profiles": 0, "linked_indexers": 0, "download_clients": 0, "root_folders": 0, "webhooks": 0, "seerr_admin": 0, "seerr_servers": 0, "altmount_arr_instances": 0, "jellyfin_libraries": 0, "plex_libraries": 0}
     for app in apps:
         record("auto_config.app.begin", app=app.name, kind=app.kind, slug=app.slug, url=app.url)
         _paint_naming(session, app)
@@ -2253,6 +2395,7 @@ def paint() -> dict[str, int]:
     totals["altmount_arr_instances"] = _ensure_altmount_arr_management(session, apps)
     totals["seerr_admin"] = _ensure_seerr_admin_user()
     totals["jellyfin_libraries"] = _ensure_jellyfin_libraries(session)
+    totals["plex_libraries"] = _ensure_plex_libraries(session)
     totals["seerr_servers"] = _ensure_seerr_servers(session, apps)
     time.sleep(10)
     for app in apps:

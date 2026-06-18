@@ -78,6 +78,18 @@
                 "label": "Plex Machine ID (optional)",
                 "type": "text",
                 "required": false
+            },
+            {
+                "name": "PlexClaim",
+                "label": "Plex Claim Token (optional)",
+                "type": "text",
+                "required": false
+            },
+            {
+                "name": "PlexToken",
+                "label": "Plex Access Token (optional)",
+                "type": "text",
+                "required": false
             }
         ]
     },
@@ -113,7 +125,8 @@
                 "SEERR_ADMIN_PASSWORD={Context.SeerrAdminPassword}",
                 "SEERR_ADMIN_PASSWORD_FILE=/config/seerr-admin-password.txt",
                 "PLEX_SERVER_NAME={Context.PlexServerName}",
-                "PLEX_MACHINE_ID={Context.PlexMachineId}"
+                "PLEX_MACHINE_ID={Context.PlexMachineId}",
+                "PLEX_TOKEN={Context.PlexToken}"
             ],
             "labels": {
                 "cosmos-auto-update": "true",
@@ -147,6 +160,11 @@
                 {
                     "source": "{Context.ConfigRoot}/seerr",
                     "target": "/seerr-config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.ConfigRoot}/plex",
+                    "target": "/plex-config",
                     "type": "bind"
                 },
                 {
@@ -280,7 +298,8 @@
                 "PUID={Context.PUID}",
                 "PGID={Context.PGID}",
                 "TZ=Europe/Copenhagen",
-                "VERSION=docker"
+                "VERSION=docker",
+                "PLEX_CLAIM={Context.PlexClaim}"
             ],
             "volumes": [
                 {
@@ -324,7 +343,8 @@
                 "MEDIA_SERVER_URL=http://plex:32400",
                 "MEDIA_SERVER_EXTERNAL_URL={Context.MediaServerExternalUrl}",
                 "PLEX_SERVER_NAME={Context.PlexServerName}",
-                "PLEX_MACHINE_ID={Context.PlexMachineId}"
+                "PLEX_MACHINE_ID={Context.PlexMachineId}",
+                "PLEX_TOKEN={Context.PlexToken}"
             ],
             "volumes": [
                 {

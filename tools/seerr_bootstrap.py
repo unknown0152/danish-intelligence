@@ -82,7 +82,7 @@ def default_settings() -> dict:
             "locale": "en",
             "youtubeUrl": "",
         },
-        "plex": {"name": "", "ip": "", "port": 32400, "useSsl": False, "libraries": []},
+        "plex": {"name": "", "ip": "", "port": 32400, "useSsl": False, "libraries": [], "accessToken": ""},
         "jellyfin": {
             "name": "",
             "ip": "",
@@ -147,6 +147,7 @@ def apply_defaults(settings: dict) -> bool:
             "ip": host,
             "port": port,
             "useSsl": use_ssl,
+            "accessToken": clean_env("PLEX_TOKEN") or clean_env("PLEX_ACCESS_TOKEN") or plex.get("accessToken", ""),
         }
         for key, value in values.items():
             if plex.get(key) != value:
