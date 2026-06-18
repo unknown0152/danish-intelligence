@@ -746,6 +746,7 @@ def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: 
     changed = 0
     indexers = _get_json(session, f"{prowlarr_url}/api/v1/indexer", prowlarr_key)
     oldboys = next((indexer for indexer in indexers if _clean_name(str(indexer.get("name", ""))) == "oldboys"), None)
+    app_profile_id = _prowlarr_default_app_profile_id(session, prowlarr_url, prowlarr_key)
 
     if oldboys is None:
         schemas = _get_json(session, f"{prowlarr_url}/api/v1/indexer/schema", prowlarr_key)
@@ -757,6 +758,7 @@ def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: 
         oldboys["name"] = "OldBoys {DK}"
         oldboys["enable"] = True
         oldboys["priority"] = 25
+        oldboys["appProfileId"] = app_profile_id
         _set_field(oldboys, "baseUrl", f"{ARR_PROXY_URL}/ob")
         _set_field(oldboys, "apiPath", "/api")
         _set_field(oldboys, "apiKey", proxy_key)
@@ -774,6 +776,7 @@ def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: 
             oldboys["priority"] = max(1, int(oldboys.get("priority") or 25))
         except (TypeError, ValueError):
             oldboys["priority"] = 25
+        oldboys["appProfileId"] = app_profile_id
         _set_field(oldboys, "baseUrl", f"{ARR_PROXY_URL}/ob")
         _set_field(oldboys, "apiPath", "/api")
         _set_field(oldboys, "apiKey", proxy_key)
@@ -809,6 +812,24 @@ def _ensure_prowlarr_oldboys_proxy_key(session: requests.Session, prowlarr_url: 
             record("auto_config.prowlarr_oldboys.health_check_failed", error=str(exc), error_type=type(exc).__name__)
     record("auto_config.prowlarr_oldboys.complete", changed=changed)
     return changed
+
+
+def _prowlarr_default_app_profile_id(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> int:
+    try:
+        profiles = _get_json(session, f"{prowlarr_url}/api/v1/appProfile", prowlarr_key)
+    except requests.RequestException as exc:
+        record("auto_config.prowlarr_app_profile.default_failed", error=str(exc), error_type=type(exc).__name__)
+        return 1
+    if isinstance(profiles, list):
+        for profile in profiles:
+            try:
+                profile_id = int(profile.get("id") or 0)
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if profile_id > 0:
+                return profile_id
+    record("auto_config.prowlarr_app_profile.default_missing")
+    return 1
 
 
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:

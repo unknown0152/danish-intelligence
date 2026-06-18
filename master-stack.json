@@ -94,8 +94,32 @@
         ]
     },
     "services": {
+        "danish-stack-init": {
+            "image": "alpine:3.20",
+            "container_name": "danish-stack-init",
+            "restart": "no",
+            "command": "sh -c 'set -eu; mkdir -p /stack-config/danish-intelligence /stack-config/radarr /stack-config/sonarr /stack-config/radarr-2160p /stack-config/sonarr-2160p /stack-config/seerr/logs /stack-config/altmount/metadata /stack-config/altmount/data /stack-config/altmount/segment-cache /stack-config/plex /stack-config/jellyfin /media/movies /media/danish-movies /media/kids-movies /media/documentaries /media/christmas-movies /media/classics /media/tv /media/danish-tv /media/kids-tv /media/documentary-series /media/christmas-tv; chown -R {Context.PUID}:{Context.PGID} /stack-config /media; chmod -R ug+rwX /stack-config /media'",
+            "volumes": [
+                {
+                    "source": "{Context.ConfigRoot}",
+                    "target": "/stack-config",
+                    "type": "bind"
+                },
+                {
+                    "source": "{Context.MediaRoot}",
+                    "target": "/media",
+                    "type": "bind"
+                }
+            ],
+            "labels": {
+                "cosmos-force-network-secured": "true"
+            },
+            "networks": {
+                "media-stack": {}
+            }
+        },
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.15",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.16",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -199,7 +223,10 @@
                 "media-stack": {}
             },
             "depends_on": {
-                "seerr": {}
+                "seerr": {},
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         },
         "altmount": {
@@ -271,7 +298,8 @@
                 "ALTMOUNT_ARRS_WEBHOOK_BASE_URL=http://altmount:8080",
                 "ALTMOUNT_ARRS_CLEANUP_AUTOMATIC_IMPORT_FAILURE=false",
                 "ALTMOUNT_ARRS_QUEUE_CLEANUP_INTERVAL_SECONDS=300",
-                "ALTMOUNT_ARRS_QUEUE_CLEANUP_GRACE_PERIOD_MINUTES=10"
+                "ALTMOUNT_ARRS_QUEUE_CLEANUP_GRACE_PERIOD_MINUTES=10",
+                "ALTMOUNT_SABNZBD_FALLBACK_API_KEY={Passwords.33}"
             ],
             "volumes": [
                 {
@@ -317,6 +345,11 @@
             ],
             "networks": {
                 "media-stack": {}
+            },
+            "depends_on": {
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         },
         "plex": {
@@ -359,10 +392,15 @@
             },
             "networks": {
                 "media-stack": {}
+            },
+            "depends_on": {
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.15",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.16",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",
@@ -387,6 +425,11 @@
             },
             "labels": {
                 "cosmos-force-network-secured": "true"
+            },
+            "depends_on": {
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         },
         "seerr": {
@@ -416,7 +459,10 @@
                 "media-stack": {}
             },
             "depends_on": {
-                "seerr-bootstrap": {}
+                "seerr-bootstrap": {},
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         },
         "radarr": {
@@ -457,6 +503,11 @@
             },
             "networks": {
                 "media-stack": {}
+            },
+            "depends_on": {
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         },
         "sonarr": {
@@ -497,6 +548,11 @@
             },
             "networks": {
                 "media-stack": {}
+            },
+            "depends_on": {
+                "danish-stack-init": {
+                    "condition": "service_completed_successfully"
+                }
             }
         }
     },
