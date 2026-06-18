@@ -453,7 +453,25 @@ def _parse_newznab_items(xml_text: str, *, indexer_id: int, indexer_name: str) -
     return items
 
 
-async def _prowlarr_indexers(app: web.Application, prowlarr_url: str, api_key: str) -> list[dict]:
+async def _prowlarr_indexers(
+    app: web.Application,
+    prowlarr_url: str,
+    api_key: str,
+    *,
+    force_refresh: bool = False,
+) -> list[dict]:
+    ttl = max(5, int(os.getenv("SEARCH_INDEXER_CACHE_SECONDS", "300")))
+    cache = app.setdefault("search_indexer_cache", {})
+    cache_key = prowlarr_url
+    cached = cache.get(cache_key)
+    now = time.time()
+    if (
+        not force_refresh
+        and isinstance(cached, dict)
+        and now - cached.get("ts", 0) < ttl
+    ):
+        return cached.get("indexers", [])
+
     headers = {"X-Api-Key": api_key}
     async with app["session"].get(
         f"{prowlarr_url}/api/v1/indexer",
@@ -465,7 +483,9 @@ async def _prowlarr_indexers(app: web.Application, prowlarr_url: str, api_key: s
         data = await resp.json()
     if not isinstance(data, list):
         return []
-    return [item for item in data if isinstance(item, dict) and item.get("enable") is True]
+    indexers = [item for item in data if isinstance(item, dict) and item.get("enable") is True]
+    cache[cache_key] = {"ts": now, "indexers": indexers}
+    return indexers
 
 
 async def handle_search_v1(request: web.Request) -> web.Response:
@@ -490,7 +510,13 @@ async def handle_search_v1(request: web.Request) -> web.Response:
         limit = 100
 
     prowlarr_url = os.getenv("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
-    indexers = await _prowlarr_indexers(request.app, prowlarr_url, prowlarr_key)
+    force_refresh = request.query.get("refresh_indexers") == "1"
+    indexers = await _prowlarr_indexers(
+        request.app,
+        prowlarr_url,
+        prowlarr_key,
+        force_refresh=force_refresh,
+    )
     t_value = "movie" if media_type == "movie" else "tvsearch"
     categories = (
         "2000,2010,2020,2030,2040,2045,2050,2060,2070,2080,2090"
@@ -504,10 +530,11 @@ async def handle_search_v1(request: web.Request) -> web.Response:
         "extended": "1",
         "apikey": prowlarr_key,
         "offset": "0",
-        "limit": str(limit),
+        "limit": str(min(limit, 100)),
     }
     results = []
     errors = []
+    max_results = min(limit * max(1, len(indexers)), 1000)
     for indexer in indexers:
         indexer_id = _json_int(indexer.get("id"))
         if indexer_id is None:
@@ -530,8 +557,8 @@ async def handle_search_v1(request: web.Request) -> web.Response:
         results.extend(
             _parse_newznab_items(body, indexer_id=indexer_id, indexer_name=indexer_name)
         )
-        if len(results) >= limit:
-            results = results[:limit]
+        if len(results) >= max_results:
+            results = results[:max_results]
             break
 
     return web.json_response(
