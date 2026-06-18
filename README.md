@@ -15,12 +15,18 @@ automatically configures the local Arr stack.
 - Exposes OldBoys as an optional Newznab-compatible proxy endpoint.
 - Runs DanskArr autopilot on a schedule.
 - Paints Danish Custom Formats and Quality Profiles into Radarr and Sonarr.
+- Enables Arr renaming and writes IMDb/TMDb IDs, quality, and Custom Format
+  markers into imported filenames.
+- Whitelists the proxy's Danish subtitle markers in Arr indexer settings so the
+  Arrs do not treat them as real hardcoded subtitle tags.
 - Rewires Radarr/Sonarr indexers and AltMount download clients to use
   `http://danish-intelligence:9699`.
+- Registers Radarr/Sonarr back into AltMount ARR Management for queue/file
+  synchronization without Remote Path Mappings.
 - Deploys Seerr in the full stack for request management without storing private
   Jellyfin, Radarr, Sonarr, or Seerr API keys in the market manifest.
-- Keeps `dksubs-proxy` as a compatibility network alias for older saved Arr
-  indexer URLs.
+- Recognizes `dksubs-proxy` as a compatibility hostname for older saved Arr
+  indexer URLs. The standalone core manifest also exposes that Docker DNS alias.
 
 ## Cosmos Install
 
@@ -40,7 +46,18 @@ Tagged releases also publish matching Docker image tags. The Cosmos market
 points to tagged compose files, and those full-stack compose files pin Danish
 Intelligence to the same release image tag so clean installs are reproducible.
 
-The core Cosmos installer fields are optional:
+Market entries:
+
+- `Prowlarr (Danish Prerequisite)`: install first on clean servers, then add
+  your indexers in Prowlarr.
+- `Danish Media Stack (Jellyfin Edition)`: Jellyfin, Seerr, Radarr, Sonarr,
+  AltMount, and Danish Intelligence.
+- `Danish Media Stack (Plex Edition)`: Plex, Seerr, Radarr, Sonarr, AltMount,
+  and Danish Intelligence.
+- `Danish Intelligence`: standalone core for existing Arr/AltMount stacks.
+- `AltMount (Danish Edition)`: standalone patched AltMount.
+
+The core installer fields are optional:
 
 - `ProwlarrKey`: Prowlarr API key. Danish Intelligence first tries mounted
   Prowlarr config, then this explicit field.
@@ -63,16 +80,32 @@ The market offers two full-stack editions:
 - `Danish Media Stack (Jellyfin Edition)` deploys Jellyfin as the media server.
 
 Both editions include Seerr, Radarr, Sonarr, AltMount, and Danish Intelligence.
-Only the selected media server is deployed. The full-stack installer also has
-an optional `Install separate 2160p Radarr and Sonarr` checkbox. When enabled,
-it adds `radarr-2160p` and `sonarr-2160p`, registers them in Prowlarr when
-reachable, paints them with separate 2160p root folders, and adds matching
-2160p Radarr/Sonarr server entries to Seerr. Optional 2160p Arrs get explicit
-`Danish Audio 2160p` and
-`Danish Subtitles 2160p` quality profiles with only 2160p qualities enabled,
-and they use their own AltMount SAB categories (`movies-2160p` and
-`tv-2160p`) so queue/history entries stay separate from standard `movies` and
-`tv` activity.
+Only the selected media server is deployed. The current public Plex/Jellyfin
+market entries install the standard Radarr/Sonarr pair. The auto-painter also
+supports companion `radarr-2160p` and `sonarr-2160p` instances when a custom or
+future manifest provides those services, their config mounts, and
+`ENABLE_2160P_ARRS=true`. In that mode it registers the 2160p Arrs in Prowlarr
+when reachable, paints separate 2160p root folders, adds matching Seerr server
+entries, creates `Danish Audio 2160p` and `Danish Subtitles 2160p` profiles with
+only 2160p qualities enabled, and uses separate AltMount SAB categories
+(`movies-2160p` and `tv-2160p`).
+
+The full-stack editions create this media/library shape:
+
+```text
+/media/movies
+/media/danish-movies
+/media/documentaries
+/media/tv
+/media/danish-tv
+/media/kids-movies
+/media/kids-tv
+```
+
+Radarr uses `/media/movies`, `/media/danish-movies`, `/media/documentaries`,
+and `/media/kids-movies`. Sonarr uses `/media/tv`, `/media/danish-tv`, and
+`/media/kids-tv`. Jellyfin or Plex gets matching libraries, and Seerr receives
+matching movie/TV root-folder choices.
 
 ## Expected Network
 
@@ -169,8 +202,11 @@ global false positives.
 - `service.py`: container entrypoint that combines the proxy, OldBoys, autopilot,
   and auto-painter.
 
-Prowlarr application sync is set to `addOnly` so Prowlarr does not overwrite the
-proxy URLs in Radarr/Sonarr.
+Prowlarr application sync is temporarily switched to `fullSync` during the
+initial paint pass when indexers need to be pushed into the Arrs, then returned
+to `addOnly` so Prowlarr does not overwrite the proxy URLs in Radarr/Sonarr.
+Danish Intelligence also trims unnecessary Prowlarr sync categories from the app
+links so category noise does not get pushed into the Arrs.
 
 ## Runtime Verification
 
@@ -265,9 +301,9 @@ If `/ob/health` reports `disabled`, add `OldBoysToken` and `OldBoysRSS` in
 Cosmos and recreate the container. The rest of the service can run without
 OldBoys.
 
-If OldBoys fails with `PROXY_API_KEY` missing, update to the latest image. The
-service now persists a fallback key in `/config/proxy_api_key` when Cosmos does
-not materialize `{Passwords.32}`.
+If OldBoys or the AltMount shim fails with `PROXY_API_KEY` missing, update to
+the latest release image. The service persists a fallback key in
+`/config/proxy_api_key` when Cosmos does not materialize `{Passwords.32}`.
 
 For AltMount integration:
 
@@ -277,9 +313,9 @@ For AltMount integration:
   Automatic repair and repair-on-import stay disabled by default so AltMount can
   report bad files without deleting, blocklisting, or replacing media through
   Radarr/Sonarr.
-- Playback-safe defaults keep failure masking enabled, cap background imports
-  while streams are active, and size the segment cache for high-bitrate Plex
-  playback.
+- Playback-safe defaults disable streaming failure masking so real segment/NZB
+  failures are visible, cap background imports while streams are active, and
+  size the segment cache for high-bitrate playback.
 - The full stack pins the native FUSE mount shape used by the Arrs:
   mount type `fuse`, mount path `/mnt/altmount`, and metadata under
   `/config/metadata`.
