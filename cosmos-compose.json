@@ -24,7 +24,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.12",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.13",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -86,6 +86,14 @@
                     "target": "/arr-config/sonarr-2160p",
                     "type": "bind",
                     "read_only": true
+                },
+                {
+                    "source": "/mnt",
+                    "target": "/mnt",
+                    "type": "bind",
+                    "bind": {
+                        "propagation": "rshared"
+                    }
                 }
             ],
             "networks": {

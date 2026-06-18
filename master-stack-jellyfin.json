@@ -84,7 +84,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.12",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.13",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -167,6 +167,14 @@
                     "source": "{Context.ConfigRoot}/jellyfin",
                     "target": "/jellyfin-config",
                     "type": "bind"
+                },
+                {
+                    "source": "/mnt",
+                    "target": "/mnt",
+                    "type": "bind",
+                    "bind": {
+                        "propagation": "rshared"
+                    }
                 },
                 {
                     "source": "{Context.MediaRoot}",
@@ -340,7 +348,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.12",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.13",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",

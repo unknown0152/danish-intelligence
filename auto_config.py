@@ -399,6 +399,30 @@ def _desired_altmount_health_library_dir() -> str:
     return (_clean_env("DANISH_ALTMOUNT_HEALTH_LIBRARY_DIR") or "/media").rstrip("/")
 
 
+def _ensure_altmount_import_dir_path(path: str) -> None:
+    if not path or not path.startswith("/"):
+        return
+    try:
+        target = Path(path)
+        target.mkdir(parents=True, exist_ok=True)
+        uid = _clean_env("PUID")
+        gid = _clean_env("PGID")
+        if uid.isdigit() and gid.isdigit():
+            os.chown(target, int(uid), int(gid))
+            target.chmod(0o2775)
+        else:
+            target.chmod(0o2777)
+        record("auto_config.altmount_import_dir.ready", path=path, uid=uid or None, gid=gid or None)
+    except OSError as exc:
+        record(
+            "auto_config.altmount_import_dir.failed",
+            path=path,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        raise RuntimeError(f"AltMount import directory is not writable: {path}") from exc
+
+
 def _delete(session: requests.Session, url: str, api_key: str) -> None:
     resp = _request(session, "DELETE", url, api_key, timeout=20)
     if resp.status_code not in (200, 202, 204, 404):
@@ -1458,9 +1482,14 @@ def _cf_payload(name: str, pattern: str, include_rename: bool = False, required:
 
 
 def _managed_cf_payloads() -> list[dict[str, Any]]:
+    nordic_subtitle_title = (
+        rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b"
+        r"|(?:^|[._\-\s])NORD(?:iC|IC)(?:[._\-\s]|$)"
+        r"|(?:^|[._\-\s])NorTekst(?:[._\-\s]|$))"
+    )
     return [
         _cf_payload(CF_DANISH_AUDIO, rf"(?:\[Danish Audio\]|{re.escape(DK_AUDIO_TITLE)}\b|{re.escape(LEGACY_DK_AUDIO_TITLE)}\b)", include_rename=True),
-        _cf_payload(CF_DANISH_SUBTITLES, rf"(?:\[Danish Subtitles\]|{re.escape(DK_SUBS_TITLE)}\b|{re.escape(LEGACY_DK_SUBS_TITLE)}\b)", include_rename=True),
+        _cf_payload(CF_DANISH_SUBTITLES, nordic_subtitle_title, include_rename=True),
         {
             "id": 0,
             "name": "TrueHD Atmos",
@@ -2120,6 +2149,7 @@ def _ensure_altmount_arr_management(session: requests.Session, apps: list[ArrApp
         if isinstance(import_config, dict):
             import_config["import_strategy"] = desired_import_strategy
             if desired_import_strategy != "NONE":
+                _ensure_altmount_import_dir_path(desired_import_dir)
                 import_config["import_dir"] = desired_import_dir
 
         health = config.setdefault("health", {})
