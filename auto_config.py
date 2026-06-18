@@ -1252,16 +1252,18 @@ def _ensure_plex_libraries(session: requests.Session) -> int:
     plex_url = _media_server_url()
     headers = _plex_headers(token)
     try:
+        prefs_url = f"{plex_url}/:/prefs"
         prefs_response = session.put(
-            f"{plex_url}/:/prefs",
+            prefs_url,
             params={"AcceptedEULA": "1"},
             headers=headers,
             timeout=20,
         )
-        prefs_response.raise_for_status()
+        _raise_for_status(prefs_response, "PUT", prefs_url)
 
-        response = session.get(f"{plex_url}/library/sections", headers=headers, timeout=20)
-        response.raise_for_status()
+        sections_url = f"{plex_url}/library/sections"
+        response = session.get(sections_url, headers=headers, timeout=20)
+        _raise_for_status(response, "GET", sections_url)
         root = ET.fromstring(response.text)
         existing_names = {
             str(directory.attrib.get("title") or "").lower()
@@ -1279,8 +1281,9 @@ def _ensure_plex_libraries(session: requests.Session) -> int:
                 continue
             scanner = "Plex Movie" if library_type == "movie" else "Plex TV Series"
             agent = "tv.plex.agents.movie" if library_type == "movie" else "tv.plex.agents.series"
+            create_url = f"{plex_url}/library/sections"
             create_response = session.post(
-                f"{plex_url}/library/sections",
+                create_url,
                 params={
                     "type": library_type,
                     "name": name,
@@ -1292,7 +1295,7 @@ def _ensure_plex_libraries(session: requests.Session) -> int:
                 headers=headers,
                 timeout=30,
             )
-            create_response.raise_for_status()
+            _raise_for_status(create_response, "POST", create_url)
             existing_names.add(name.lower())
             created += 1
 

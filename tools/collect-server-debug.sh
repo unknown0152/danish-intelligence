@@ -243,6 +243,234 @@ for name in ("radarr", "sonarr", "radarr-2160p", "sonarr-2160p"):
             category = fields.get("movieCategory") or fields.get("tvCategory")
             print(f"- name={client_name} implementation={implementation} enable={enabled} host={host} port={port} urlBase={url_base} category={category}")
 PY'
+  run_cmd danish-intelligence/indexer-sync-audit docker exec danish-intelligence sh -c 'python3 <<'"'"'PY'"'"'
+import json
+import os
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from urllib import request, error
+from urllib.parse import urlparse, urlunparse
+
+APPS = {
+    "prowlarr": ("http://prowlarr:9696", "/arr-config/prowlarr/config.xml", "/api/v1"),
+    "radarr": (os.getenv("RADARR_URL", "http://radarr:7878"), "/arr-config/radarr/config.xml", "/api/v3"),
+    "sonarr": (os.getenv("SONARR_URL", "http://sonarr:8989"), "/arr-config/sonarr/config.xml", "/api/v3"),
+}
+
+SECRET_FIELD_NAMES = {"apikey", "apiKey", "password", "token", "secret", "rid"}
+
+def config_key(path):
+    p = Path(path)
+    if not p.exists():
+        return "", "missing"
+    try:
+        root = ET.parse(p).getroot()
+        return (root.findtext("ApiKey", "") or "").strip(), "ok"
+    except Exception as exc:
+        return "", f"parse-error:{type(exc).__name__}"
+
+def get_json(url, key):
+    req = request.Request(url, headers={"X-Api-Key": key})
+    try:
+        with request.urlopen(req, timeout=12) as resp:
+            return resp.status, json.loads(resp.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")[:800]
+        return exc.code, {"error": str(exc), "body": body}
+    except Exception as exc:
+        return "error", {"error": f"{type(exc).__name__}: {exc}"}
+
+def field_map(item):
+    out = {}
+    for field in item.get("fields", []) or []:
+        if not isinstance(field, dict):
+            continue
+        name = str(field.get("name") or "")
+        if name in SECRET_FIELD_NAMES or "key" in name.lower() or "token" in name.lower() or "password" in name.lower():
+            continue
+        out[name] = field.get("value")
+    return out
+
+def safe_url(value):
+    text = str(value or "")
+    if not text:
+        return ""
+    parsed = urlparse(text)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", "", ""))
+
+def category_ids(indexer):
+    ids = set()
+    def visit(categories):
+        for category in categories or []:
+            try:
+                ids.add(int(category.get("id")))
+            except Exception:
+                pass
+            visit(category.get("subCategories") or [])
+    visit((indexer.get("capabilities") or {}).get("categories") or [])
+    return sorted(ids)
+
+keys = {}
+for name, (base, cfg, api) in APPS.items():
+    key, status = config_key(cfg)
+    keys[name] = key
+    print(f"{name}: config={status} key_present={bool(key)} base={base}")
+
+prowlarr_key = keys.get("prowlarr")
+if prowlarr_key:
+    status, apps = get_json("http://prowlarr:9696/api/v1/applications", prowlarr_key)
+    print(f"\nProwlarr applications: status={status}")
+    if isinstance(apps, list):
+        for app in apps:
+            fields = field_map(app)
+            app_id = app.get("id")
+            app_name = app.get("name")
+            implementation = app.get("implementation")
+            enabled = app.get("enable")
+            sync_level = app.get("syncLevel")
+            base_url = safe_url(fields.get("baseUrl"))
+            print(
+                f"- id={app_id} name={app_name} impl={implementation} "
+                f"enable={enabled} syncLevel={sync_level} baseUrl={base_url}"
+            )
+
+    status, indexers = get_json("http://prowlarr:9696/api/v1/indexer", prowlarr_key)
+    print(f"\nProwlarr indexers: status={status}")
+    if isinstance(indexers, list):
+        for indexer in indexers:
+            fields = field_map(indexer)
+            indexer_id = indexer.get("id")
+            indexer_name = indexer.get("name")
+            implementation = indexer.get("implementation")
+            enabled = indexer.get("enable")
+            priority = indexer.get("priority")
+            base_url = safe_url(fields.get("baseUrl"))
+            caps = category_ids(indexer)
+            print(
+                f"- id={indexer_id} name={indexer_name} impl={implementation} "
+                f"enable={enabled} priority={priority} baseUrl={base_url} caps={caps}"
+            )
+
+    status, commands = get_json("http://prowlarr:9696/api/v1/command", prowlarr_key)
+    print(f"\nProwlarr recent sync commands: status={status}")
+    if isinstance(commands, list):
+        for command in commands[:20]:
+            name = command.get("name") or command.get("commandName")
+            if name and "sync" not in str(name).lower() and "application" not in str(name).lower():
+                continue
+            command_id = command.get("id")
+            status_text = command.get("status")
+            started = command.get("startedOn")
+            ended = command.get("endedOn")
+            message = command.get("message")
+            print(
+                f"- id={command_id} name={name} status={status_text} "
+                f"started={started} ended={ended} message={message}"
+            )
+
+for app_name in ("radarr", "sonarr"):
+    key = keys.get(app_name)
+    if not key:
+        continue
+    base = APPS[app_name][0].rstrip("/")
+    status, indexers = get_json(f"{base}/api/v3/indexer", key)
+    print(f"\n{app_name} indexers: status={status}")
+    if isinstance(indexers, list):
+        for indexer in indexers:
+            fields = field_map(indexer)
+            indexer_id = indexer.get("id")
+            indexer_name = indexer.get("name")
+            implementation = indexer.get("implementation")
+            enabled = indexer.get("enable")
+            rss = indexer.get("enableRss")
+            automatic = indexer.get("enableAutomaticSearch")
+            interactive = indexer.get("enableInteractiveSearch")
+            priority = indexer.get("priority")
+            base_url = safe_url(fields.get("baseUrl"))
+            categories = fields.get("categories")
+            anime_categories = fields.get("animeCategories")
+            print(
+                f"- id={indexer_id} name={indexer_name} impl={implementation} "
+                f"enable={enabled} rss={rss} auto={automatic} interactive={interactive} "
+                f"priority={priority} baseUrl={base_url} categories={categories} anime={anime_categories}"
+            )
+PY'
+  run_cmd danish-intelligence/plex-state-audit docker exec danish-intelligence sh -c 'python3 <<'"'"'PY'"'"'
+import os
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from urllib import request, error, parse
+
+PLEX_URL = os.getenv("MEDIA_SERVER_URL", "http://plex:32400").rstrip("/")
+LIBRARIES = (
+    ("Movies", "movie", "/media/movies"),
+    ("Danish Movies", "movie", "/media/danish-movies"),
+    ("Documentaries", "movie", "/media/documentaries"),
+    ("Christmas Movies", "movie", "/media/christmas-movies"),
+    ("Classics", "movie", "/media/classics"),
+    ("TV Shows", "show", "/media/tv"),
+    ("Danish TV", "show", "/media/danish-tv"),
+    ("Documentary Series", "show", "/media/documentary-series"),
+    ("Christmas TV", "show", "/media/christmas-tv"),
+    ("Kids Movies", "movie", "/media/kids-movies"),
+    ("Kids TV", "show", "/media/kids-tv"),
+)
+
+def plex_config_root():
+    for path in (
+        "/plex-config/Library/Application Support/Plex Media Server",
+        "/srv/config/plex/Library/Application Support/Plex Media Server",
+    ):
+        p = Path(path)
+        if p.exists():
+            return p
+    return None
+
+def prefs_token():
+    root = plex_config_root()
+    if not root:
+        return ""
+    prefs = root / "Preferences.xml"
+    if prefs.exists():
+        try:
+            return str(ET.parse(prefs).getroot().attrib.get("PlexOnlineToken") or "").strip()
+        except ET.ParseError:
+            return ""
+    local = root / ".LocalAdminToken"
+    if local.exists():
+        return local.read_text(errors="ignore").strip()
+    return ""
+
+token = os.getenv("PLEX_TOKEN") or os.getenv("PLEX_ACCESS_TOKEN") or prefs_token()
+source = "env" if (os.getenv("PLEX_TOKEN") or os.getenv("PLEX_ACCESS_TOKEN")) else ("plex-config" if token else "missing")
+print(f"plex_url={PLEX_URL} token_present={bool(token)} token_source={source}")
+print("This section is read-only and does not attempt library creation.")
+
+for name, library_type, path in LIBRARIES:
+    p = Path(path)
+    print(f"path name={name!r} type={library_type} path={path} exists={p.exists()} is_dir={p.is_dir()}")
+
+def get(path):
+    url = f"{PLEX_URL}{path}"
+    headers = {}
+    if token:
+        headers["X-Plex-Token"] = token
+    req = request.Request(url, headers=headers)
+    try:
+        with request.urlopen(req, timeout=12) as resp:
+            body = resp.read().decode("utf-8", "replace")
+            return resp.status, body[:3000]
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")
+        return exc.code, body[:3000]
+    except Exception as exc:
+        return "error", f"{type(exc).__name__}: {exc}"
+
+for path in ("/identity", "/library/sections", "/system/scanners", "/system/agents"):
+    status, body = get(path)
+    print(f"\nGET {path}: status={status}")
+    print(body)
+PY'
 fi
 
 run_cmd summary/tree sh -c "find '$OUT' -type f -printf '%s %p\n' | sort -n"
