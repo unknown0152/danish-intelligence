@@ -236,6 +236,11 @@
                     "type": "bind"
                 },
                 {
+                    "source": "{Context.ConfigRoot}/altmount/metadata",
+                    "target": "/metadata",
+                    "type": "bind"
+                },
+                {
                     "source": "{Context.MediaRoot}",
                     "target": "/media",
                     "type": "bind"

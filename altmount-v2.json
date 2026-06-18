@@ -83,6 +83,11 @@
                     "type": "bind"
                 },
                 {
+                    "source": "/srv/config/altmount/metadata",
+                    "target": "/metadata",
+                    "type": "bind"
+                },
+                {
                     "source": "/srv/data/altmount",
                     "target": "/data",
                     "type": "bind"
