@@ -635,18 +635,7 @@ def _is_altmount_proxy_client(client: dict[str, Any]) -> bool:
     )
 
 
-def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
-    record("auto_config.bootstrap.begin", prowlarr_url=prowlarr_url)
-    apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
-    existing_names = {_slug(str(app.get("name", ""))) for app in apps}
-    schemas = _get_json(session, f"{prowlarr_url}/api/v1/applications/schema", prowlarr_key)
-    record(
-        "auto_config.bootstrap.loaded",
-        existing_app_count=len(apps),
-        schema_count=len(schemas),
-        enable_2160p=_enable_2160p_arrs(),
-    )
-
+def _wanted_arr_app_specs() -> list[tuple[str, str, str]]:
     wanted_apps = [
         ("Radarr", "Radarr", _default_arr_url("Radarr", "Radarr")),
         ("Sonarr", "Sonarr", _default_arr_url("Sonarr", "Sonarr")),
@@ -656,8 +645,33 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
             ("Radarr", "Radarr 2160p", _default_arr_url("Radarr", "Radarr 2160p")),
             ("Sonarr", "Sonarr 2160p", _default_arr_url("Sonarr", "Sonarr 2160p")),
         ])
+    return wanted_apps
 
-    for kind, name, url in wanted_apps:
+
+def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
+    record("auto_config.bootstrap.begin", prowlarr_url=prowlarr_url)
+    apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
+    if _arr_no_indexers():
+        wanted_slugs = {_slug(name) for _, name, _ in _wanted_arr_app_specs()}
+        deleted = 0
+        for app in apps:
+            if _slug(str(app.get("name", ""))) not in wanted_slugs:
+                continue
+            _delete(session, f"{prowlarr_url}/api/v1/applications/{app['id']}", prowlarr_key)
+            deleted += 1
+        record("auto_config.bootstrap.arr_apps_removed", deleted=deleted)
+        return
+
+    existing_names = {_slug(str(app.get("name", ""))) for app in apps}
+    schemas = _get_json(session, f"{prowlarr_url}/api/v1/applications/schema", prowlarr_key)
+    record(
+        "auto_config.bootstrap.loaded",
+        existing_app_count=len(apps),
+        schema_count=len(schemas),
+        enable_2160p=_enable_2160p_arrs(),
+    )
+
+    for kind, name, url in _wanted_arr_app_specs():
         api_key = _first_working_arr_key(session, kind, name, url)
         if not api_key:
             print(f"[Core] Auto-Config: {name} is not reachable yet; Prowlarr registration skipped", flush=True)
@@ -854,6 +868,19 @@ def _prowlarr_default_app_profile_id(session: requests.Session, prowlarr_url: st
 
 def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> list[ArrApp]:
     record("auto_config.discover.begin", prowlarr_url=prowlarr_url)
+    if _arr_no_indexers():
+        discovered: list[ArrApp] = []
+        for kind, name, url in _wanted_arr_app_specs():
+            api_key = _first_working_arr_key(session, kind, name, url)
+            if not api_key:
+                print(f"[Core] Auto-Config: {name} API key unavailable or unauthorized", flush=True)
+                record("auto_config.discover.skip_key_or_auth", app=name, kind=kind, url=url, mode="direct")
+                continue
+            discovered.append(ArrApp(name=name, kind=kind, slug=_slug(name), url=url.rstrip("/"), api_key=api_key))
+            record("auto_config.discover.found", app=name, kind=kind, slug=_slug(name), url=url.rstrip("/"), mode="direct")
+        record("auto_config.discover.complete", discovered_count=len(discovered), prowlarr_app_count=0, mode="direct")
+        return discovered
+
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     discovered: list[ArrApp] = []
     for app in apps:
@@ -2581,6 +2608,17 @@ def _seed_seerr_media_server_via_api(session: requests.Session, seerr_url: str, 
 def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
     record("auto_config.prowlarr_app_harden.begin", prowlarr_url=prowlarr_url)
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
+    if _arr_no_indexers():
+        wanted = {_slug(name) for name in _required_arr_app_names()}
+        deleted = 0
+        for app in apps:
+            if _slug(str(app.get("name", ""))) not in wanted:
+                continue
+            _delete(session, f"{prowlarr_url}/api/v1/applications/{app['id']}", prowlarr_key)
+            deleted += 1
+        record("auto_config.prowlarr_app_harden.removed", deleted=deleted)
+        return
+
     changed = 0
     for app in apps:
         name = app.get("name", "")

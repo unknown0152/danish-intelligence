@@ -119,7 +119,7 @@
             }
         },
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.23",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.24",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -401,7 +401,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.23",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.24",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",
