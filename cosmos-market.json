@@ -21,7 +21,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.22/prowlarr-prereq.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.23/prowlarr-prereq.json"
     },
     {
       "id": "danish-master-stack-plex",
@@ -46,7 +46,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.22/master-stack.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.23/master-stack.json"
     },
     {
       "id": "danish-master-stack-jellyfin",
@@ -71,7 +71,7 @@
       "supported_architectures": [
         "amd64"
       ],
-      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.22/master-stack-jellyfin.json"
+      "compose": "https://raw.githubusercontent.com/unknown0152/danish-intelligence/v1.0.23/master-stack-jellyfin.json"
     }
   ]
 }

@@ -24,7 +24,7 @@
     },
     "services": {
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.22",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.23",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -35,6 +35,7 @@
                 "PROXY_API_KEY={Passwords.32}",
                 "PROXY_URL=http://danish-intelligence:9699",
                 "ALTMOUNT_URL=http://altmount:8080/sabnzbd",
+                "DANISH_ARR_NO_INDEXERS=true",
                 "RADARR_URL=http://radarr:7878",
                 "SONARR_URL=http://sonarr:8989",
                 "CACHE_DB=/config/proxy_cache.db",

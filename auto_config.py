@@ -352,6 +352,20 @@ def _arr_indexer_search_enabled() -> bool:
     return _truthy_env("DANISH_ARR_INDEXER_SEARCH_ENABLED")
 
 
+def _arr_no_indexers() -> bool:
+    return _truthy_env("DANISH_ARR_NO_INDEXERS")
+
+
+def _set_arr_indexer_search_flags(indexer: dict[str, Any]) -> bool:
+    search_enabled = _arr_indexer_search_enabled()
+    changed = False
+    for key in ("enableRss", "enableAutomaticSearch", "enableInteractiveSearch"):
+        if indexer.get(key) != search_enabled:
+            indexer[key] = search_enabled
+            changed = True
+    return changed
+
+
 def _get_json(session: requests.Session, url: str, api_key: str) -> Any:
     return _request_json(session, "GET", url, api_key, timeout=20)
 
@@ -596,10 +610,7 @@ def _set_indexer_target_fields(indexer: dict[str, Any], app: ArrApp, target: dic
     if app.kind == "Sonarr":
         _set_field(indexer, "animeCategories", target["animeCategories"])
     indexer["name"] = target["name"]
-    search_enabled = _arr_indexer_search_enabled()
-    indexer["enableRss"] = search_enabled
-    indexer["enableAutomaticSearch"] = search_enabled
-    indexer["enableInteractiveSearch"] = search_enabled
+    _set_arr_indexer_search_flags(indexer)
     indexer["priority"] = max(1, int(indexer.get("priority") or 25))
 
 
@@ -655,7 +666,7 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
 
         existing_app = next((app for app in apps if _slug(str(app.get("name", ""))) == _slug(name)), None)
         if existing_app:
-            existing_app["enable"] = True
+            existing_app["enable"] = not _arr_no_indexers()
             existing_app["syncLevel"] = "addOnly"
             _set_field(existing_app, "prowlarrUrl", ARR_PROXY_URL)
             _set_field(existing_app, "baseUrl", url)
@@ -676,7 +687,7 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
             continue
 
         schema["name"] = name
-        schema["enable"] = True
+        schema["enable"] = not _arr_no_indexers()
         schema["syncLevel"] = "addOnly"
         _set_field(schema, "prowlarrUrl", ARR_PROXY_URL)
         _set_field(schema, "baseUrl", url)
@@ -693,6 +704,10 @@ def _bootstrap_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_k
 
 def _sync_prowlarr_indexers(session: requests.Session, prowlarr_url: str, prowlarr_key: str) -> None:
     """Force an initial Prowlarr application sync so fresh Arrs receive indexers."""
+    if _arr_no_indexers():
+        record("auto_config.prowlarr_sync.skipped", reason="arr_no_indexers")
+        return
+
     record("auto_config.prowlarr_sync.begin")
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     wanted = {_slug(name) for name in _required_arr_app_names()}
@@ -1859,8 +1874,27 @@ def _upsert_profile(session: requests.Session, app: ArrApp, profiles: list[dict[
 def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: list[dict[str, Any]], prowlarr_key: str) -> int:
     record("auto_config.rewire_indexers.begin", app=app.name, kind=app.kind, prowlarr_indexer_count=len(prowlarr_indexers))
     api = f"{app.url}/api/v3"
-    targets = _managed_prowlarr_targets(prowlarr_indexers, app)
     arr_indexers = _get_json(session, f"{api}/indexer", app.api_key)
+
+    if _arr_no_indexers():
+        deleted = 0
+        for indexer in arr_indexers:
+            if not isinstance(indexer, dict):
+                continue
+            indexer_id = indexer.get("id")
+            if not indexer_id:
+                continue
+            _delete(session, f"{api}/indexer/{indexer_id}", app.api_key)
+            deleted += 1
+        record(
+            "auto_config.rewire_indexers.removed_all",
+            app=app.name,
+            deleted=deleted,
+            arr_indexer_count=len(arr_indexers),
+        )
+        return 0
+
+    targets = _managed_prowlarr_targets(prowlarr_indexers, app)
 
     by_clean_name: dict[str, list[dict[str, Any]]] = {}
     for indexer in arr_indexers:
@@ -1919,6 +1953,34 @@ def _rewire_indexers(session: requests.Session, app: ArrApp, prowlarr_indexers: 
         target_count=len(targets),
     )
     return linked
+
+
+def _enforce_passive_arr_indexers(session: requests.Session, app: ArrApp) -> int:
+    api = f"{app.url}/api/v3"
+    try:
+        arr_indexers = _get_json(session, f"{api}/indexer", app.api_key)
+    except Exception as exc:
+        record(
+            "auto_config.arr_indexer_search_mode.skipped",
+            app=app.name,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return 0
+    changed = 0
+    for indexer in arr_indexers:
+        if not isinstance(indexer, dict):
+            continue
+        if _set_arr_indexer_search_flags(indexer):
+            _put_json(session, f"{api}/indexer/{indexer['id']}?forceSave=true", app.api_key, indexer)
+            changed += 1
+    record(
+        "auto_config.arr_indexer_search_mode.complete",
+        app=app.name,
+        search_enabled=_arr_indexer_search_enabled(),
+        changed=changed,
+    )
+    return changed
 
 
 def _paint_naming(session: requests.Session, app: ArrApp) -> None:
@@ -2525,6 +2587,7 @@ def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prow
         kind = _arr_kind(app)
         if kind not in DEFAULT_APP_URLS:
             continue
+        app["enable"] = not _arr_no_indexers()
         app["syncLevel"] = "addOnly"
         drop = [2020, 2030, 2060, 2070] if kind == "Radarr" else [5030]
         sync_categories = _field(app, "syncCategories")
@@ -2558,6 +2621,8 @@ def paint() -> dict[str, int]:
             "PLEX_TOKEN",
             "ENABLE_2160P_ARRS",
             "PROXY_API_KEY",
+            "DANISH_ARR_NO_INDEXERS",
+            "DANISH_ARR_INDEXER_SEARCH_ENABLED",
         ]),
         paths=path_state([
             "/arr-config/prowlarr/config.xml",
@@ -2599,6 +2664,7 @@ def paint() -> dict[str, int]:
         root_folders = _ensure_root_folders(session, app)
         cf_count, profile_count = _paint_formats_and_profiles(session, app)
         linked = _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
+        _enforce_passive_arr_indexers(session, app)
         download_clients = _ensure_download_client(session, app)
         webhooks = _ensure_marker_webhook(session, app)
         seerr_servers = 0
@@ -2640,5 +2706,6 @@ def paint() -> dict[str, int]:
     time.sleep(10)
     for app in apps:
         _rewire_indexers(session, app, prowlarr_indexers, prowlarr_key)
+        _enforce_passive_arr_indexers(session, app)
     record("auto_config.paint.complete", totals=totals)
     return totals

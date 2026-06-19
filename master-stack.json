@@ -119,7 +119,7 @@
             }
         },
         "danish-intelligence": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.22",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.23",
             "container_name": "danish-intelligence",
             "restart": "unless-stopped",
             "environment": [
@@ -131,6 +131,7 @@
                 "ALTMOUNT_API_KEY={Passwords.32}",
                 "PROXY_URL=http://danish-intelligence:9699",
                 "ALTMOUNT_URL=http://altmount:8080",
+                "DANISH_ARR_NO_INDEXERS=true",
                 "PUID={Context.PUID}",
                 "PGID={Context.PGID}",
                 "CACHE_DB=/config/proxy_cache.db",
@@ -400,7 +401,7 @@
             }
         },
         "seerr-bootstrap": {
-            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.22",
+            "image": "ghcr.io/unknown0152/danish-intelligence:v1.0.23",
             "container_name": "seerr-bootstrap",
             "restart": "no",
             "command": "python3 /app/tools/seerr_bootstrap.py",
