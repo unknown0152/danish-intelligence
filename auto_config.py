@@ -348,6 +348,10 @@ def _truthy_env(name: str) -> bool:
     return _clean_env(name).lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _arr_indexer_search_enabled() -> bool:
+    return _truthy_env("DANISH_ARR_INDEXER_SEARCH_ENABLED")
+
+
 def _get_json(session: requests.Session, url: str, api_key: str) -> Any:
     return _request_json(session, "GET", url, api_key, timeout=20)
 
@@ -592,9 +596,10 @@ def _set_indexer_target_fields(indexer: dict[str, Any], app: ArrApp, target: dic
     if app.kind == "Sonarr":
         _set_field(indexer, "animeCategories", target["animeCategories"])
     indexer["name"] = target["name"]
-    indexer["enableRss"] = True
-    indexer["enableAutomaticSearch"] = True
-    indexer["enableInteractiveSearch"] = True
+    search_enabled = _arr_indexer_search_enabled()
+    indexer["enableRss"] = search_enabled
+    indexer["enableAutomaticSearch"] = search_enabled
+    indexer["enableInteractiveSearch"] = search_enabled
     indexer["priority"] = max(1, int(indexer.get("priority") or 25))
 
 

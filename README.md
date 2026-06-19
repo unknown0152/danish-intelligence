@@ -21,6 +21,8 @@ automatically configures the local Arr stack.
   Arrs do not treat them as real hardcoded subtitle tags.
 - Rewires Radarr/Sonarr indexers and AltMount download clients to use
   `http://danish-intelligence:9699`.
+- Keeps Radarr/Sonarr indexer RSS, automatic search, and interactive search
+  disabled by default so DMM/Danish Intelligence owns release decisions.
 - Registers Radarr/Sonarr back into AltMount ARR Management for queue/file
   synchronization without Remote Path Mappings.
 - Deploys Seerr in the full stack for request management without storing private
@@ -223,6 +225,13 @@ initial paint pass when indexers need to be pushed into the Arrs, then returned
 to `addOnly` so Prowlarr does not overwrite the proxy URLs in Radarr/Sonarr.
 Danish Intelligence also trims unnecessary Prowlarr sync categories from the app
 links so category noise does not get pushed into the Arrs.
+
+By default, Arr indexers are present but passive: `enableRss`,
+`enableAutomaticSearch`, and `enableInteractiveSearch` are set to `false`. This
+keeps Radarr/Sonarr focused on metadata, library tracking, import, and repair
+while DMM/Danish Intelligence decides which release to grab. Set
+`DANISH_ARR_INDEXER_SEARCH_ENABLED=true` only if you intentionally want
+Radarr/Sonarr to make their own search/grab decisions again.
 
 ## Runtime Verification
 
