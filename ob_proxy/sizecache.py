@@ -14,7 +14,8 @@ import logging
 import sqlite3
 import threading
 import time
-from typing import Awaitable, Callable, NamedTuple
+from collections.abc import Awaitable, Callable
+from typing import NamedTuple
 
 from .nzbparse import parse_nzb
 

@@ -4,7 +4,7 @@ import os
 import re
 from pathlib import Path
 
-from .__init__ import ATTR_DK_RE, CATEGORY_ATTR_RE, CATEGORY_RE, ITEM_RE, MIN_RELEASE_SIZE, MIN_RELEASE_SIZE_MOVIE, MIN_RELEASE_SIZE_TV, _PROXY_TAG_RE, _EXT_RE, _WS_RE, _metrics, log
+from .__init__ import CATEGORY_ATTR_RE, CATEGORY_RE, ITEM_RE, MIN_RELEASE_SIZE, MIN_RELEASE_SIZE_MOVIE, MIN_RELEASE_SIZE_TV, _PROXY_TAG_RE, _EXT_RE, _WS_RE, _metrics
 from .tags import DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, LEGACY_DK_AUDIO_TITLE, LEGACY_DK_SUBS_TITLE, NO_DK_TAG, normalize_dk_tag
 
 
@@ -236,11 +236,14 @@ def _classify_dk_proximity(text: str) -> tuple[bool, bool]:
         stripped = ln.strip()
         if stripped:
             if _SUBS_HEADER_LINE_RE.match(ln):
-                current_section = "subs"; section_age = 0
+                current_section = "subs"
+                section_age = 0
             elif _AUDIO_HEADER_LINE_RE.match(ln):
-                current_section = "audio"; section_age = 0
+                current_section = "audio"
+                section_age = 0
             elif _OTHER_HEADER_LINE_RE.match(ln):
-                current_section = None; section_age = 0
+                current_section = None
+                section_age = 0
             else:
                 section_age += 1
             if section_age > _PROXIMITY_WINDOW:
@@ -320,8 +323,8 @@ def compute_actual_tag(audio_languages: list[str],
     """Compute the authoritative DK tag from ffprobe output."""
     def has_dk(langs):
         return any(
-            (str(l) or "").strip().lower() in _DANISH_LANG_CODES
-            for l in (langs or [])
+            (str(lang) or "").strip().lower() in _DANISH_LANG_CODES
+            for lang in (langs or [])
         )
     if has_dk(audio_languages):
         return DK_AUDIO_TITLE

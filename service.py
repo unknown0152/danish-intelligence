@@ -3,10 +3,8 @@ import html
 import os
 import sys
 import secrets
-import re
 import time
 import logging
-import subprocess
 import xml.etree.ElementTree as ET
 import importlib.util
 from pathlib import Path
@@ -606,9 +604,12 @@ async def main():
 
     # Cosmos Market Endpoints
     async def serve_market(r):
-        with open("cosmos-market.json", "r") as f: return web.Response(text=f.read(), content_type="application/json")
+        with open("cosmos-market.json") as f:
+            return web.Response(text=f.read(), content_type="application/json")
+
     async def serve_compose(r):
-        with open("cosmos-compose.json", "r") as f: return web.Response(text=f.read(), content_type="application/json")
+        with open("cosmos-compose.json") as f:
+            return web.Response(text=f.read(), content_type="application/json")
     
     app.router.add_get("/cosmos-market.json", serve_market)
     app.router.add_get("/cosmos-compose.json", serve_compose)

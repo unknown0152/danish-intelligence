@@ -34,7 +34,7 @@ class Config:
     user_agent: str
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         return cls(
             ob_base_url=_env("OB_BASE_URL", "https://oldboys.pw").rstrip("/"),
             ob_api_token=_env("OB_API_TOKEN", ""),

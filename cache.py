@@ -1,6 +1,5 @@
 """Cache: SQLite-backed NFO cache, request dedup, indexer probes, scene group learning."""
 
-import re
 import time
 
 import aiosqlite
@@ -202,35 +201,19 @@ async def cache_set(nzb_id: str, tag: str, release_name: str = "",
         return
     mt_blob = _encode_media_tags(media_tags or [])
     try:
-        async with _db.execute("PRAGMA table_info(nfo_cache)") as cur:
-            cols = {row[1] for row in await cur.fetchall()}
-        if "source" in cols:
-            await _db.execute(
-                "INSERT OR REPLACE INTO nfo_cache "
-                "(nzb_id, result_tag, release_name, scanned_at, media_tags, source) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    nzb_id,
-                    normalize_result_tag(tag),
-                    release_name,
-                    time.time(),
-                    mt_blob,
-                    source,
-                ),
-            )
-        else:
-            await _db.execute(
-                "INSERT OR REPLACE INTO nfo_cache "
-                "(nzb_id, result_tag, release_name, scanned_at, media_tags) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (
-                    nzb_id,
-                    normalize_result_tag(tag),
-                    release_name,
-                    time.time(),
-                    mt_blob,
-                ),
-            )
+        await _db.execute(
+            "INSERT OR REPLACE INTO nfo_cache "
+            "(nzb_id, result_tag, release_name, scanned_at, media_tags, source) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                nzb_id,
+                normalize_result_tag(tag),
+                release_name,
+                time.time(),
+                mt_blob,
+                source,
+            ),
+        )
         await _db.commit()
     except Exception as e:
         log(f"cache_set failed: {e!r}", "WARN")

@@ -12,9 +12,9 @@ from pathlib import Path
 import aiohttp
 from aiohttp import web
 
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode, urlparse
 
-from .__init__ import DK_AUDIO_TITLE, DK_SUBS_TITLE, DKSUBS_PROXY_V56_FEATURES, ITEM_RE, LISTEN_HOST, LISTEN_PORT, PROWLARR_API_KEY, PROWLARR_URL, SCENE_GROUP_ENABLED, TITLE_RE, VERSION, _enrich_ids, _metrics, _nfo_ids, _req_id, _scene_group_profiles, _title_only_ids, log
+from .__init__ import DK_AUDIO_TITLE, DK_SUBS_TITLE, DKSUBS_PROXY_V56_FEATURES, ITEM_RE, LISTEN_HOST, LISTEN_PORT, PROWLARR_API_KEY, PROWLARR_URL, SCENE_GROUP_ENABLED, TITLE_RE, VERSION, _enrich_ids, _metrics, _nfo_ids, _req_id, _title_only_ids, log
 from .cache import _db, backfill_scene_groups_from_cache, cache_init, rebuild_scene_group_profiles, record_indexer_probes
 from .classification import _empty_or_filler_response, _inject_probe_filler_if_empty, _is_status_probe, fold_scandi_query
 from .enrichment import enrich_with_extended_attrs
@@ -513,8 +513,6 @@ async def _handle_inner(request, indexer_id, params, arr_source, apikey, dedup_k
 
     session = request.app['session']
     content = None
-    EMPTY_XML = '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/"><channel><newznab:response offset="0" total="0"/></channel></rss>'
-
     # v6.2: Support direct upstream URLs for specialized bridges (ob-proxy)
     direct_url = os.getenv(f"INDEXER_{indexer_id}_BASEURL")
     if direct_url:
@@ -703,14 +701,19 @@ async def on_cleanup(app):
 
 
 async def main():
-    app = web.Application(client_max_size=ALTMOUNT_SHIM_MAX_UPLOAD_MB * 1024 * 1024); app.on_startup.append(on_startup)
+    app = web.Application(client_max_size=ALTMOUNT_SHIM_MAX_UPLOAD_MB * 1024 * 1024)
+    app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
     app.router.add_get("/health", lambda r: web.json_response({"status": "ok", "version": VERSION}))
     app.router.add_get("/metrics", lambda r: web.json_response(dict(_metrics)))
     app.router.add_post("/learn/imported", _handle_learn_imported)
     app.router.add_route('*', '/{tail:.*}', handle)
-    runner = web.AppRunner(app); await runner.setup()
-    site = web.TCPSite(runner, LISTEN_HOST, LISTEN_PORT); await site.start()
-    log(f"Proxy v{VERSION} active on {LISTEN_HOST}:{LISTEN_PORT}"); await asyncio.Event().wait()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, LISTEN_HOST, LISTEN_PORT)
+    await site.start()
+    log(f"Proxy v{VERSION} active on {LISTEN_HOST}:{LISTEN_PORT}")
+    await asyncio.Event().wait()
 
-if __name__ == "__main__": asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from email.utils import format_datetime
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 from xml.sax.saxutils import escape, quoteattr
 
 from . import __version__

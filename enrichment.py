@@ -2,7 +2,7 @@
 
 import aiohttp
 
-from .__init__ import ATTR_RE, GUID_RE, ITEM_RE, _metrics, log
+from .__init__ import ATTR_RE, GUID_RE, ITEM_RE, log
 from .nfo_fetch import _extract_nzb_id, direct_indexer_config
 
 

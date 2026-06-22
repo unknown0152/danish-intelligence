@@ -95,7 +95,6 @@ async def _handle_search(request: web.Request) -> web.Response:
     cfg: Config = request.app["config"]
     client: OBClient = request.app["client"]
     cache: SizeCache = request.app["cache"]
-    warmer: Warmer = request.app["warmer"]
 
     ob_params = build_ob_params(request.query, cfg.cat_map, default_per_page=100)
     try:
@@ -142,7 +141,6 @@ async def _handle_search(request: web.Request) -> web.Response:
 
 
 async def _handle_get(request: web.Request) -> web.Response:
-    cfg: Config = request.app["config"]
     client: OBClient = request.app["client"]
     cache: SizeCache = request.app["cache"]
 

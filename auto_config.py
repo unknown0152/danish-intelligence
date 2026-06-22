@@ -884,7 +884,7 @@ def _discover_arr_apps(session: requests.Session, prowlarr_url: str, prowlarr_ke
     apps = _get_json(session, f"{prowlarr_url}/api/v1/applications", prowlarr_key)
     discovered: list[ArrApp] = []
     for app in apps:
-        name = app.get("name", "")
+        name = str(app.get("name", ""))
         kind = _arr_kind(app)
         if kind not in DEFAULT_APP_URLS:
             continue
@@ -2621,7 +2621,6 @@ def _harden_prowlarr_app_sync(session: requests.Session, prowlarr_url: str, prow
 
     changed = 0
     for app in apps:
-        name = app.get("name", "")
         kind = _arr_kind(app)
         if kind not in DEFAULT_APP_URLS:
             continue

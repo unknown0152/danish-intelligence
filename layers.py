@@ -7,8 +7,7 @@ import time
 
 import aiohttp
 
-from .__init__ import DKSUBS_PROXY_V56_FEATURES, GLOBAL_CONCURRENCY, MOVIE_VERDICT_TRIGGER, MOVIE_VERDICT_TTL, MOVIE_VERDICT_WINDOW, NFO_TIMEOUT, REQUEST_DEDUP_TTL, VERSION, _metrics, log
-from .cache import _db
+from .__init__ import GLOBAL_CONCURRENCY, MOVIE_VERDICT_TRIGGER, MOVIE_VERDICT_TTL, MOVIE_VERDICT_WINDOW, NFO_TIMEOUT, REQUEST_DEDUP_TTL, VERSION, _metrics, log
 
 
 def extract_external_id(params: dict):

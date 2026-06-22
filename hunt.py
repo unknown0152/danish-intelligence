@@ -26,17 +26,23 @@ async def hunt_danish(content, indexer_id, apikey, session,
     """Returns (xml, probe_results_dict). probe_results maps nzb_id -> tag
     (or NO_DK_TAG) for each NFO probed in this search."""
     params = params or {}
-    _metrics["hunt_total"] += 1; found_hits = {}; candidates = []; items = ITEM_RE.findall(content)
+    _metrics["hunt_total"] += 1
+    found_hits = {}
+    candidates = []
+    items = ITEM_RE.findall(content)
     log(f"HUNT: parsed {len(items)} items from indexer {indexer_id}", "INFO")
     probe_results: dict = {}
     media_tags_by_nid: dict = {}
     for item_xml in items:
-        title_m = TITLE_RE.search(item_xml); guid_m = GUID_RE.search(item_xml)
+        title_m = TITLE_RE.search(item_xml)
+        guid_m = GUID_RE.search(item_xml)
         if not title_m or not guid_m:
             continue
-        title = title_m.group(2); g_url = guid_m.group(1).strip()
+        title = title_m.group(2)
+        g_url = guid_m.group(1).strip()
         nid = _extract_nzb_id(g_url)
-        if not nid: continue
+        if not nid:
+            continue
         
         # Quality Rejection
         if LOWQ_RE.search(title):
@@ -52,12 +58,14 @@ async def hunt_danish(content, indexer_id, apikey, session,
         # Native DK Check
         if is_native_dk_title(title, native_titles):
             found_hits[nid] = DK_AUDIO_TITLE
-            await cache_set(nid, DK_AUDIO_TITLE, title, source="native-title"); continue
+            await cache_set(nid, DK_AUDIO_TITLE, title, source="native-title")
+            continue
         
         # Audio Check
         if AUDIO_DK_RE.search(title):
             found_hits[nid] = DK_AUDIO_TITLE
-            await cache_set(nid, DK_AUDIO_TITLE, title, source="title"); continue
+            await cache_set(nid, DK_AUDIO_TITLE, title, source="title")
+            continue
 
         subs_from_title = bool(SUBS_DK_RE.search(title))
         # Scene group shortcut: if NORDiC in title + known group, skip NFO
@@ -98,16 +106,19 @@ async def hunt_danish(content, indexer_id, apikey, session,
         subs_attr_is_dk = bool(ATTR_DK_RE.search(subs_attr))
         if audio_is_dk:
             found_hits[nid] = DK_AUDIO_TITLE
-            await cache_set(nid, DK_AUDIO_TITLE, title, source="attr"); continue
+            await cache_set(nid, DK_AUDIO_TITLE, title, source="attr")
+            continue
         if language_is_dk:
             if not subs_from_title:
                 found_hits[nid] = DK_AUDIO_TITLE
-                await cache_set(nid, DK_AUDIO_TITLE, title, source="attr"); continue
+                await cache_set(nid, DK_AUDIO_TITLE, title, source="attr")
+                continue
             # else: NORDiC + language=Danish is ambiguous, fall through
         if subs_attr_is_dk:
             if not subs_from_title:
                 found_hits[nid] = DK_SUBS_TITLE
-                await cache_set(nid, DK_SUBS_TITLE, title, source="attr"); continue
+                await cache_set(nid, DK_SUBS_TITLE, title, source="attr")
+                continue
         if language_has_value and not language_is_dk and (
             subs_from_title or subs_attr_is_dk
         ):
@@ -135,7 +146,8 @@ async def hunt_danish(content, indexer_id, apikey, session,
                 if subs_from_title:
                     found_hits[nid] = DK_SUBS_TITLE
                     await cache_set(nid, DK_SUBS_TITLE, title, source="title")
-                log(f"nfo=0 skip for {nid} ({title[:50]})", "DEBUG"); continue
+                log(f"nfo=0 skip for {nid} ({title[:50]})", "DEBUG")
+                continue
             info_url = attrs.get("info", "")
             candidates.append((nid, title, g_url, info_url, subs_from_title))
         elif subs_from_title:
@@ -253,7 +265,8 @@ async def hunt_danish(content, indexer_id, apikey, session,
     if not found_hits and not DROP_NON_DK:
         return content, probe_results
     def replacer(m):
-        xml = m.group(1); g_m = GUID_RE.search(xml)
+        xml = m.group(1)
+        g_m = GUID_RE.search(xml)
         if not g_m:
             return "" if DROP_NON_DK else xml
         nid = _extract_nzb_id(g_m.group(1).strip())

@@ -105,7 +105,8 @@ NFO_DIRECT_RATE_WINDOW = float(os.getenv("NFO_DIRECT_RATE_WINDOW", "10")) # per 
 class SlidingWindowRateLimiter:
     """Async context manager: allows at most `calls` entries in any `window`-second window."""
     def __init__(self, calls: int, window: float):
-        self._calls = calls; self._window = window
+        self._calls = calls
+        self._window = window
         self._timestamps: collections.deque = collections.deque()
         self._lock = asyncio.Lock()
     async def __aenter__(self):
@@ -251,7 +252,8 @@ async def load_indexer_configs(session) -> None:
         async with session.get(f"{PROWLARR_URL}/api/v1/indexer",
                                params={"apikey": PROWLARR_API_KEY},
                                timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            if resp.status != 200: return
+            if resp.status != 200:
+                return
             data = json.loads(await resp.text())
             for ix in data:
                 iid = str(ix["id"])
@@ -279,7 +281,8 @@ async def fetch_nfo(session, indexer_id, nzb_id, apikey) -> str | None:
                     if _nfo_is_valid_text(text):
                         return text
                     log(f"getnfo via Prowlarr returned non-NFO content for indexer {indexer_id}", "DEBUG")
-        except: continue
+        except Exception:
+            continue
     return None
 
 # Per-indexer API quirks for getnfo (matched by substring of baseUrl)

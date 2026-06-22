@@ -4,26 +4,30 @@ Danish Intelligence Core  v6.1
 Unified NFO-Hunter, OldBoys Proxy, and DanskArr Autopilot.
 """
 
-import asyncio
 import collections
 import contextvars
 import datetime
-import ipaddress
 import json
 import os
 import re
-import secrets
-import socket
 import sys
-import time
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlparse
 
-import aiohttp
-import aiosqlite
-from aiohttp import web
 from dotenv import load_dotenv
-from .tags import DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, PROXY_TAG_RE, SCENE_GROUP_RE
+
+try:
+    from .tags import DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, PROXY_TAG_RE, SCENE_GROUP_RE
+except ImportError:  # pragma: no cover - supports direct pytest/tool imports from repo root
+    from tags import DK_AUDIO_NFO, DK_AUDIO_TITLE, DK_SUBS_NFO, DK_SUBS_TITLE, PROXY_TAG_RE, SCENE_GROUP_RE
+
+__all__ = (
+    "DK_AUDIO_NFO",
+    "DK_AUDIO_TITLE",
+    "DK_SUBS_NFO",
+    "DK_SUBS_TITLE",
+    "PROXY_TAG_RE",
+    "SCENE_GROUP_RE",
+)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -128,8 +132,6 @@ INDEXER_SCORING_MIN_PROBES = int(os.getenv("INDEXER_SCORING_MIN_PROBES",   "10")
 NFO_EARLY_EXIT_HITS        = int(os.getenv("NFO_EARLY_EXIT_HITS",          "2"))
 DKSUBS_PROXY_NFO_MEDIA_TAGS = _env_bool("DKSUBS_PROXY_NFO_MEDIA_TAGS", False)
 
-import hashlib  # noqa: E402
-
 def _max_nfo_candidates(indexer_id: str) -> int:
     """Per-indexer NFO candidate cap."""
     return int(os.getenv(f"INDEXER_{indexer_id}_MAX_NFO_CANDIDATES", str(MAX_NFO_CANDIDATES)))
@@ -212,8 +214,10 @@ def scrub(msg: str) -> str:
     return msg
 
 def log(msg: str, level: str = "INFO") -> None:
-    if level == "DEBUG" and not DEBUG_LOGGING: return
-    rid = _req_id.get(); ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if level == "DEBUG" and not DEBUG_LOGGING:
+        return
+    rid = _req_id.get()
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sys.stderr.write(scrub(f"[{ts}] [dksubs] [{rid}] [{level}] {msg}\n"))
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
