@@ -3,7 +3,7 @@
 import aiohttp
 
 from .__init__ import ATTR_RE, GUID_RE, ITEM_RE, _metrics, log
-from .nfo_fetch import _extract_nzb_id, _indexer_configs
+from .nfo_fetch import _extract_nzb_id, direct_indexer_config
 
 
 def extract_attrs(item_xml: str) -> dict[str, str]:
@@ -16,8 +16,8 @@ def extract_attrs(item_xml: str) -> dict[str, str]:
 
 
 async def enrich_with_extended_attrs(content: str, indexer_id: str, params: dict, session) -> str:
-    """Query the indexer directly with extended=1 and inject subs/language attrs into content."""
-    cfg = _indexer_configs.get(indexer_id, {})
+    """Query the indexer directly with extended=1 and inject language/audio/subs attrs into content."""
+    cfg = direct_indexer_config(indexer_id)
     apikey = cfg.get("apikey", "")
     baseurl = cfg.get("baseUrl", "")
     if not apikey or not baseurl:
@@ -28,6 +28,7 @@ async def enrich_with_extended_attrs(content: str, indexer_id: str, params: dict
     direct_params["extended"] = "1"
     try:
         async with session.get(f"{baseurl}/api", params=direct_params,
+                               headers={"User-Agent": "danish-intelligence/1.0"},
                                timeout=aiohttp.ClientTimeout(total=10)) as resp:
             if resp.status != 200:
                 return content
@@ -44,7 +45,7 @@ async def enrich_with_extended_attrs(content: str, indexer_id: str, params: dict
         if not nid:
             continue
         attrs = extract_attrs(item_xml)
-        if attrs.get("subs") or attrs.get("language"):
+        if attrs.get("subs") or attrs.get("language") or attrs.get("audio"):
             attr_map[nid] = attrs
     if not attr_map:
         return content
@@ -58,10 +59,11 @@ async def enrich_with_extended_attrs(content: str, indexer_id: str, params: dict
         extra_attrs = attr_map.get(nid, {})
         if not extra_attrs:
             return item_xml
+        existing_attrs = extract_attrs(item_xml)
         injected = "".join(
             f'<newznab:attr name="{n}" value="{v}"/>'
             for n, v in extra_attrs.items()
-            if n in ("subs", "language") and v
+            if n in ("subs", "language", "audio") and v and not existing_attrs.get(n)
         )
         return item_xml.replace("</item>", injected + "</item>") if injected else item_xml
     return ITEM_RE.sub(inject, content)

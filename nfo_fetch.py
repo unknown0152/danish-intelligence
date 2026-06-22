@@ -7,6 +7,7 @@ import json
 import os
 import re
 import socket
+import sqlite3
 import time
 from urllib.parse import urlparse
 
@@ -172,6 +173,58 @@ async def _search_rate_limit_ok(indexer_id: str) -> bool:
 
 _indexer_configs: dict[str, dict] = {}  # str(indexer_id) -> {apikey, baseUrl}
 
+
+def _merge_indexer_config(configs: dict[str, dict], iid: str, values: dict) -> None:
+    current = configs.setdefault(str(iid), {})
+    for key in ("apikey", "baseUrl"):
+        value = (values.get(key) or "").strip()
+        if value and not current.get(key):
+            current[key] = value.rstrip("/") if key == "baseUrl" else value
+
+
+def _load_indexer_configs_from_prowlarr_db(configs: dict[str, dict]) -> int:
+    """Fill direct indexer API keys from the read-only Prowlarr config mount."""
+    db_path = os.getenv("PROWLARR_DB_PATH", "/arr-config/prowlarr/prowlarr.db")
+    if not os.path.exists(db_path):
+        return 0
+    loaded = 0
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute("select Id, Settings from Indexers where Enable = 1").fetchall()
+        finally:
+            conn.close()
+        for row in rows:
+            try:
+                settings = json.loads(row["Settings"] or "{}")
+            except Exception:
+                continue
+            before = dict(configs.get(str(row["Id"]), {}))
+            _merge_indexer_config(
+                configs,
+                str(row["Id"]),
+                {
+                    "apikey": settings.get("apiKey", ""),
+                    "baseUrl": settings.get("baseUrl", ""),
+                },
+            )
+            after = configs.get(str(row["Id"]), {})
+            if after != before and after.get("apikey") and after.get("baseUrl"):
+                loaded += 1
+    except Exception as e:
+        log(f"Could not load direct indexer configs from Prowlarr DB: {e!r}", "WARN")
+    return loaded
+
+
+def has_direct_indexer_config(indexer_id: str) -> bool:
+    cfg = _indexer_configs.get(str(indexer_id), {})
+    return bool(cfg.get("apikey") and cfg.get("baseUrl"))
+
+
+def direct_indexer_config(indexer_id: str) -> dict:
+    return dict(_indexer_configs.get(str(indexer_id), {}))
+
 async def load_indexer_configs(session) -> None:
     """Load per-indexer API keys/base URLs from env or Prowlarr REST."""
     global _indexer_configs
@@ -187,9 +240,11 @@ async def load_indexer_configs(session) -> None:
             iid = m.group(1)
             configs.setdefault(iid, {})["baseUrl"] = v.rstrip("/")
 
+    db_loaded = _load_indexer_configs_from_prowlarr_db(configs)
     if configs:
         _indexer_configs = configs
-        log(f"Loaded direct API configs for {len(configs)} indexers from env")
+        source = "env/Prowlarr DB" if db_loaded else "env"
+        log(f"Loaded direct API configs for {len(configs)} indexers from {source}")
         return
 
     try:

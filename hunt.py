@@ -16,6 +16,10 @@ from .nfo_fetch import _extract_nzb_id, fetch_nfo, fetch_nfo_direct
 from .tags import NO_DK_TAG
 
 
+def _attr_has_value(attrs: dict[str, str], name: str) -> bool:
+    return bool((attrs.get(name) or "").strip())
+
+
 async def hunt_danish(content, indexer_id, apikey, session,
                       title_only: bool = False, params: dict | None = None,
                       native_titles: list[str] | None = None):
@@ -84,15 +88,48 @@ async def hunt_danish(content, indexer_id, apikey, session,
         if subs_from_title and skip_nfo_for_size:
             skip_nfo_for_size = False
         attrs = extract_attrs(item_xml)
-        if ATTR_DK_RE.search(attrs.get("language", "")):
+        language_attr = attrs.get("language", "")
+        audio_attr = attrs.get("audio", "")
+        subs_attr = attrs.get("subs", "")
+        language_has_value = _attr_has_value(attrs, "language")
+        audio_has_value = _attr_has_value(attrs, "audio")
+        language_is_dk = bool(ATTR_DK_RE.search(language_attr))
+        audio_is_dk = bool(ATTR_DK_RE.search(audio_attr))
+        subs_attr_is_dk = bool(ATTR_DK_RE.search(subs_attr))
+        if audio_is_dk:
+            found_hits[nid] = DK_AUDIO_TITLE
+            await cache_set(nid, DK_AUDIO_TITLE, title, source="attr"); continue
+        if language_is_dk:
             if not subs_from_title:
                 found_hits[nid] = DK_AUDIO_TITLE
                 await cache_set(nid, DK_AUDIO_TITLE, title, source="attr"); continue
             # else: NORDiC + language=Danish is ambiguous, fall through
-        if ATTR_DK_RE.search(attrs.get("subs", "")):
+        if subs_attr_is_dk:
             if not subs_from_title:
                 found_hits[nid] = DK_SUBS_TITLE
                 await cache_set(nid, DK_SUBS_TITLE, title, source="attr"); continue
+        if language_has_value and not language_is_dk and (
+            subs_from_title or subs_attr_is_dk
+        ):
+            found_hits[nid] = DK_SUBS_TITLE
+            await cache_set(nid, DK_SUBS_TITLE, title, source="attr")
+            log(f"Attribute shortcut -> {DK_SUBS_TITLE} for {title[:50]}", "DEBUG")
+            continue
+        if audio_has_value and not audio_is_dk and (
+            subs_from_title or subs_attr_is_dk
+        ):
+            found_hits[nid] = DK_SUBS_TITLE
+            await cache_set(nid, DK_SUBS_TITLE, title, source="attr")
+            log(f"Attribute shortcut -> {DK_SUBS_TITLE} for {title[:50]}", "DEBUG")
+            continue
+        if language_has_value and not language_is_dk and not subs_from_title and not subs_attr_is_dk:
+            probe_results[nid] = NO_DK_TAG
+            log(f"Attribute shortcut -> {NO_DK_TAG} for {title[:50]}", "DEBUG")
+            continue
+        if audio_has_value and not audio_is_dk and not subs_from_title and not subs_attr_is_dk:
+            probe_results[nid] = NO_DK_TAG
+            log(f"Attribute shortcut -> {NO_DK_TAG} for {title[:50]}", "DEBUG")
+            continue
         if not title_only and not skip_nfo_for_size:
             if attrs.get("nfo") == "0":
                 if subs_from_title:

@@ -20,7 +20,7 @@ from .classification import _empty_or_filler_response, _inject_probe_filler_if_e
 from .enrichment import enrich_with_extended_attrs
 from .hunt import _handle_learn_imported, hunt_danish
 from .layers import _background_tasks, _session, dedup_get, dedup_inflight_lock, dedup_set, extract_external_id, get_session, request_key, update_movie_verdict, verdict_says_no_dk
-from .nfo_fetch import _search_rate_limit_ok, load_indexer_configs
+from .nfo_fetch import _search_rate_limit_ok, has_direct_indexer_config, load_indexer_configs
 
 
 # ── Handler ───────────────────────────────────────────────────────────────────
@@ -591,7 +591,7 @@ async def _handle_inner(request, indexer_id, params, arr_source, apikey, dedup_k
                 _metrics["verdict_suppressions"] += 1
                 log(f"Verdict suppressed NFO for {ext_id_type}:{ext_id}", "DEBUG")
 
-        if indexer_id in _nfo_ids or indexer_id in _enrich_ids:
+        if indexer_id in _nfo_ids or indexer_id in _enrich_ids or has_direct_indexer_config(indexer_id):
             try:
                 content = await enrich_with_extended_attrs(
                     content, indexer_id, params, session
