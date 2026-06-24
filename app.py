@@ -42,8 +42,8 @@ SONARR_URL = os.getenv("SONARR_URL", "http://sonarr:8989").rstrip("/")
 DEFAULT_ARR_URLS = {
     "radarr": RADARR_URL,
     "sonarr": SONARR_URL,
-    "radarr-2160p": os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7878").rstrip("/"),
-    "sonarr-2160p": os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8989").rstrip("/"),
+    "radarr-2160p": os.getenv("RADARR_2160P_URL", "http://radarr-2160p:7879").rstrip("/"),
+    "sonarr-2160p": os.getenv("SONARR_2160P_URL", "http://sonarr-2160p:8990").rstrip("/"),
 }
 ARR_CONFIG_PATHS = {
     "radarr": ("/arr-config/radarr/config.xml", "/srv/config/radarr/config.xml"),
