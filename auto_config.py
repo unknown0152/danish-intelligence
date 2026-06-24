@@ -75,8 +75,8 @@ MANAGED_CF_NAMES = {
 }
 DEFAULT_APP_URLS = {"Radarr": "http://radarr:7878", "Sonarr": "http://sonarr:8989"}
 DEFAULT_2160P_APP_URLS = {
-    "Radarr": "http://radarr-2160p:7878",
-    "Sonarr": "http://sonarr-2160p:8989",
+    "Radarr": "http://radarr-2160p:7879",
+    "Sonarr": "http://sonarr-2160p:8990",
 }
 ARR_READY_TIMEOUT_SECONDS = int(os.getenv("ARR_READY_TIMEOUT_SECONDS", "240"))
 ARR_READY_RETRY_SECONDS = int(os.getenv("ARR_READY_RETRY_SECONDS", "10"))
